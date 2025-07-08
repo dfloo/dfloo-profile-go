@@ -1,0 +1,34 @@
+version: '0.1'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+     - "8080:8080"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+     - db
+    networks:
+     - dfloo-network
+  db:
+    image: postgres
+    restart: always
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+     - "5432:5432"
+    volumes:
+     - postgres-data:/var/lib/postgresql/data
+    networks:
+     - dfloo-network
+
+networks:
+  dfloo-network:
+volumes:
+  postgres-data:
