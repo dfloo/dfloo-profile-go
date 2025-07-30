@@ -44,11 +44,11 @@ func Logger(next httprouter.Handle) httprouter.Handle {
 }
 
 func EnsureValidToken() func(next http.Handler) http.Handler {
+	log.Print("EnsureValidToken")
 	issuerURL, err := url.Parse("https://" + os.Getenv("AUTH0_DOMAIN") + "/")
 	if err != nil {
 		log.Fatalf("Failed to parse the issuer url: %v", err)
 	}
-	log.Printf("issuerURL: %v", issuerURL)
 
 	provider := jwks.NewCachingProvider(issuerURL, 5*time.Minute)
 

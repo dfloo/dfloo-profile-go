@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS profile_detail (
     address_2  TEXT,
     address_city TEXT,
     address_state TEXT,
-    zip_code INTEGER,
+    zip_code TEXT,
     country TEXT,
     social_accounts TEXT[][2]
 );
