@@ -43,6 +43,16 @@ func Logger(next httprouter.Handle) httprouter.Handle {
 	}
 }
 
+func CORS(next httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CLIENT_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "authorization, content-type")
+		next(w, r, ps)
+	}
+}
+
 func EnsureValidToken() func(next http.Handler) http.Handler {
 	log.Print("EnsureValidToken")
 	issuerURL, err := url.Parse("https://" + os.Getenv("AUTH0_DOMAIN") + "/")

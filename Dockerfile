@@ -1,7 +1,7 @@
 FROM golang:alpine AS builder
 WORKDIR /app
 ADD . /app
-RUN go build -o /dfloo-profile-go
+RUN go build -o /dfloo-profile-go ./cmd/server
 
 FROM golang:alpine
 COPY --from=builder /dfloo-profile-go /dfloo-profile-go
