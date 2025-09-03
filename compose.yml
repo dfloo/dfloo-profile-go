@@ -1,5 +1,3 @@
-version: '0.1'
-
 services:
   api:
     build:
@@ -9,8 +7,12 @@ services:
      - "8080:8080"
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN}
     depends_on:
-     - db
+      db:
+        condition: service_healthy
     networks:
      - dfloo-network
   db:
@@ -21,12 +23,30 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
     ports:
      - "5432:5432"
     volumes:
      - postgres-data:/var/lib/postgresql/data
     networks:
      - dfloo-network
+  migrate:
+    image: migrate/migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+     - dfloo-network
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+     - ./db/migrations:/migrations
+    entrypoint: [ "migrate", "-path", "/migrations", "-database", "${DATABASE_URL}", "up" ]
 
 networks:
   dfloo-network:
