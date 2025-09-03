@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS profile_detail;
+DROP TABLE IF EXISTS profile;
