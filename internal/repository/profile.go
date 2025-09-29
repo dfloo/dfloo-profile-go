@@ -115,6 +115,7 @@ func (r *ProfileRepository) CreateUserProfile(
 func (r *ProfileRepository) UpdateProfile(
 	ctx context.Context,
 	profile *model.Profile,
+	userID string,
 ) error {
 	err := r.Pool.QueryRow(
 		ctx,
@@ -131,7 +132,7 @@ func (r *ProfileRepository) UpdateProfile(
             zip_code = $10,
             country = $11,
             social_accounts = $12
-        WHERE profile_id = $13 RETURNING updated`,
+        WHERE user_id = $13 RETURNING updated`,
 		profile.PhoneNumber,
 		profile.Email,
 		profile.FirstName,
@@ -144,23 +145,11 @@ func (r *ProfileRepository) UpdateProfile(
 		profile.ZipCode,
 		profile.Country,
 		profile.SocialAccounts,
-		profile.ProfileID,
+		userID,
 	).Scan(&profile.Updated)
 	if err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func (r *ProfileRepository) DeleteProfiles(
-	ctx context.Context,
-	profileIDs []string,
-) error {
-	_, err := r.Pool.Exec(
-		ctx,
-		`DELETE FROM profile WHERE profile_id IN $1`,
-		profileIDs,
-	)
-	return err
 }
