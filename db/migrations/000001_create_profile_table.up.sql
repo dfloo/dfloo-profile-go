@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS profile (
     state TEXT,
     zip_code TEXT,
     country TEXT,
-    social_accounts JSON[],
+    social_accounts JSONB,
     created TIMESTAMP NOT NULL DEFAULT NOW(),
     updated TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (user_id)

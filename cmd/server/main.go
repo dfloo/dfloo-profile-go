@@ -28,8 +28,6 @@ func main() {
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		<-c
 		cancel()
-		Pool.Close()
-		os.Exit(0)
 	}()
 
 	log.Print("Server listening on http://localhost:8080")
