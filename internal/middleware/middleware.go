@@ -12,8 +12,38 @@ import (
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
-	"github.com/julienschmidt/httprouter"
 )
+
+func Core(h http.Handler) http.Handler {
+	return Logger(CORS(h))
+}
+
+func CoreAuthenticated(h http.Handler) http.Handler {
+	return Core(EnsureValidToken(h))
+}
+
+func Logger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Received request %s %s", r.Method, r.URL.Path)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func CORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CLIENT_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 type CustomClaims struct {
 	Scope string `json:"scope"`
@@ -36,25 +66,7 @@ func (c CustomClaims) HasScope(expectedScope string) bool {
 	return false
 }
 
-func Logger(next httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		log.Printf("Received request: %s %s", r.Method, r.URL.Path)
-		next(w, r, ps)
-	}
-}
-
-func CORS(next httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CLIENT_ORIGIN"))
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Headers", "authorization, content-type")
-		next(w, r, ps)
-	}
-}
-
-func EnsureValidToken() func(next http.Handler) http.Handler {
-	log.Print("EnsureValidToken")
+func EnsureValidToken(next http.Handler) http.Handler {
 	issuerURL, err := url.Parse("https://" + os.Getenv("AUTH0_DOMAIN") + "/")
 	if err != nil {
 		log.Fatalf("Failed to parse the issuer url: %v", err)
@@ -86,12 +98,8 @@ func EnsureValidToken() func(next http.Handler) http.Handler {
 		w.Write([]byte(`{"message":"Failed to validate JWT."}`))
 	}
 
-	middleware := jwtmiddleware.New(
+	return jwtmiddleware.New(
 		jwtValidator.ValidateToken,
 		jwtmiddleware.WithErrorHandler(errorHandler),
-	)
-
-	return func(next http.Handler) http.Handler {
-		return middleware.CheckJWT(next)
-	}
+	).CheckJWT(next)
 }

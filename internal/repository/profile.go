@@ -2,35 +2,46 @@ package repository
 
 import (
 	"context"
-	"os"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ProfileRepository struct {
-	DBUrl string
+	Pool *pgxpool.Pool
 }
 
-func NewProfileRepository() *ProfileRepository {
-	return &ProfileRepository{DBUrl: os.Getenv("DATABASE_URL")}
+func NewProfileRepository(pool *pgxpool.Pool) *ProfileRepository {
+	return &ProfileRepository{Pool: pool}
 }
 
-func (r *ProfileRepository) GetProfileByUserID(ctx context.Context, userID string) (*model.Profile, error) {
-	conn, err := pgx.Connect(ctx, r.DBUrl)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close(ctx)
-
+func (r *ProfileRepository) GetProfileByUserID(
+	ctx context.Context,
+	userID string,
+) (*model.Profile, error) {
 	var profile model.Profile
-	row := conn.QueryRow(
+	row := r.Pool.QueryRow(
 		ctx,
-		`SELECT profile_id, phone_number, email, first_name, middle_name, last_name, address_1, address_2, city, state, zip_code, country, social_accounts
+		`SELECT
+			profile_id,
+			phone_number,
+			email,
+			first_name,
+			middle_name,
+			last_name,
+			address_1,
+			address_2,
+			city,
+			state,
+			zip_code,
+			country,
+			social_accounts,
+			created,
+			updated
 		 FROM profile WHERE user_id = $1;`,
 		userID,
 	)
-	err = row.Scan(
+	err := row.Scan(
 		&profile.ProfileID,
 		&profile.PhoneNumber,
 		&profile.Email,
@@ -44,6 +55,8 @@ func (r *ProfileRepository) GetProfileByUserID(ctx context.Context, userID strin
 		&profile.ZipCode,
 		&profile.Country,
 		&profile.SocialAccounts,
+		&profile.Created,
+		&profile.Updated,
 	)
 	if err != nil {
 		return nil, err
@@ -51,19 +64,30 @@ func (r *ProfileRepository) GetProfileByUserID(ctx context.Context, userID strin
 	return &profile, nil
 }
 
-func (r *ProfileRepository) CreateUserProfile(ctx context.Context, profile *model.Profile) error {
-	conn, err := pgx.Connect(ctx, r.DBUrl)
-	if err != nil {
-		return err
-	}
-	defer conn.Close(ctx)
-
-	_, err = conn.Exec(
+func (r *ProfileRepository) CreateUserProfile(
+	ctx context.Context,
+	profile *model.Profile,
+	userID string,
+) error {
+	err := r.Pool.QueryRow(
 		ctx,
 		`INSERT INTO profile (
-            user_id, phone_number, email, first_name, middle_name, last_name, address_1, address_2, city, state, zip_code, country, social_accounts
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-		profile.UserID,
+            user_id,
+			phone_number,
+			email,
+			first_name,
+			middle_name,
+			last_name,
+			address_1,
+			address_2,
+			city,
+			state,
+			zip_code,
+			country,
+			social_accounts
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		 RETURNING profile_id, created, updated`,
+		userID,
 		profile.PhoneNumber,
 		profile.Email,
 		profile.FirstName,
@@ -76,35 +100,38 @@ func (r *ProfileRepository) CreateUserProfile(ctx context.Context, profile *mode
 		profile.ZipCode,
 		profile.Country,
 		profile.SocialAccounts,
+	).Scan(
+		&profile.ProfileID,
+		&profile.Created,
+		&profile.Updated,
 	)
-	return err
-}
-
-func (r *ProfileRepository) UpdateProfile(ctx context.Context, profile *model.Profile) error {
-	conn, err := pgx.Connect(ctx, r.DBUrl)
 	if err != nil {
 		return err
 	}
-	defer conn.Close(ctx)
 
-	_, err = conn.Exec(
+	return nil
+}
+
+func (r *ProfileRepository) UpdateProfile(
+	ctx context.Context,
+	profile *model.Profile,
+) error {
+	err := r.Pool.QueryRow(
 		ctx,
 		`UPDATE profile SET
-            resume_id = $1,
-            phone_number = $2,
-            email = $3,
-            first_name = $4,
-            middle_name = $5,
-            last_name = $6,
-            address_1 = $7,
-            address_2 = $8,
-            city = $9,
-            state = $10,
-            zip_code = $11,
-            country = $12,
-            social_accounts = $13
-        WHERE profile_id = $14`,
-		profile.ResumeID,
+            phone_number = $1,
+            email = $2,
+            first_name = $3,
+            middle_name = $4,
+            last_name = $5,
+            address_1 = $6,
+            address_2 = $7,
+            city = $8,
+            state = $9,
+            zip_code = $10,
+            country = $11,
+            social_accounts = $12
+        WHERE profile_id = $13 RETURNING updated`,
 		profile.PhoneNumber,
 		profile.Email,
 		profile.FirstName,
@@ -118,6 +145,22 @@ func (r *ProfileRepository) UpdateProfile(ctx context.Context, profile *model.Pr
 		profile.Country,
 		profile.SocialAccounts,
 		profile.ProfileID,
+	).Scan(&profile.Updated)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *ProfileRepository) DeleteProfiles(
+	ctx context.Context,
+	profileIDs []string,
+) error {
+	_, err := r.Pool.Exec(
+		ctx,
+		`DELETE FROM profile WHERE profile_id IN $1`,
+		profileIDs,
 	)
 	return err
 }
