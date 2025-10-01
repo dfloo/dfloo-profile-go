@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
-	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
-	"github.com/auth0/go-jwt-middleware/v2/validator"
+	"github.com/dfloo/dfloo-profile-go/internal/middleware"
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
 )
@@ -21,7 +19,7 @@ func NewProfileHandler(repo *repository.ProfileRepository) *ProfileHandler {
 
 func (h *ProfileHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	userID := GetUserID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
@@ -36,7 +34,7 @@ func (h *ProfileHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) 
 
 func (h *ProfileHandler) PostUserProfile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	userID := GetUserID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
@@ -58,7 +56,7 @@ func (h *ProfileHandler) PostUserProfile(w http.ResponseWriter, r *http.Request)
 
 func (h *ProfileHandler) PutUserProfile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	userID := GetUserID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
@@ -75,12 +73,4 @@ func (h *ProfileHandler) PutUserProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	json.NewEncoder(w).Encode(&profile)
-}
-
-func GetUserID(c context.Context) string {
-	claims, ok := c.Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
-	if !ok || claims == nil {
-		return ""
-	}
-	return claims.RegisteredClaims.Subject
 }

@@ -30,6 +30,7 @@ func (r *ResumeRepository) GetResumesByUserID(
             resume.education,
             resume.file_name,
             resume.template_settings,
+			resume.description,
 			resume.created,
 			resume.updated,
             profile.profile_id,
@@ -70,6 +71,7 @@ func (r *ResumeRepository) GetResumesByUserID(
 			&resume.Education,
 			&resume.FileName,
 			&resume.TemplateSettings,
+			&resume.Description,
 			&resume.Created,
 			&resume.Updated,
 			&profile.ProfileID,
@@ -160,8 +162,9 @@ func (r *ResumeRepository) CreateResume(
 			experience,
 			education,
 			file_name,
-			template_settings
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			template_settings,
+			description
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		 RETURNING resume_id, created, updated`,
 		userID,
 		resume.Profile.ProfileID,
@@ -172,6 +175,7 @@ func (r *ResumeRepository) CreateResume(
 		resume.Education,
 		resume.FileName,
 		resume.TemplateSettings,
+		resume.Description,
 	).Scan(
 		&resume.ResumeID,
 		&resume.Created,
@@ -193,6 +197,7 @@ func (r *ResumeRepository) CreateResume(
 func (r *ResumeRepository) UpdateResume(
 	ctx context.Context,
 	resume *model.Resume,
+	userID string,
 ) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
@@ -209,8 +214,9 @@ func (r *ResumeRepository) UpdateResume(
 			description = $4,
 			summary = $5,
 			file_name = $6,
-			sections = $7
-		 WHERE resume_id = $8 RETURNING updated`,
+			sections = $7,
+			template_settings = $8
+		 WHERE resume_id = $9 AND user_id = $10 RETURNING updated`,
 		resume.Education,
 		resume.Experience,
 		resume.Skills,
@@ -218,7 +224,9 @@ func (r *ResumeRepository) UpdateResume(
 		resume.Summary,
 		resume.FileName,
 		resume.Sections,
+		resume.TemplateSettings,
 		resume.ResumeID,
+		userID,
 	).Scan(&resume.Updated)
 
 	if err != nil {

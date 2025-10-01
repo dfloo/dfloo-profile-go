@@ -103,3 +103,11 @@ func EnsureValidToken(next http.Handler) http.Handler {
 		jwtmiddleware.WithErrorHandler(errorHandler),
 	).CheckJWT(next)
 }
+
+func GetUserID(c context.Context) string {
+	claims, ok := c.Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
+	if !ok || claims == nil {
+		return ""
+	}
+	return claims.RegisteredClaims.Subject
+}

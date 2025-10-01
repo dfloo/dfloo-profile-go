@@ -5,8 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
-	"github.com/auth0/go-jwt-middleware/v2/validator"
+	"github.com/dfloo/dfloo-profile-go/internal/middleware"
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
 )
@@ -20,16 +19,14 @@ func NewResumeHandler(repo *repository.ResumeRepository) *ResumeHandler {
 }
 
 func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value(
-		jwtmiddleware.ContextKey{},
-	).(*validator.ValidatedClaims)
-	if !ok || claims == nil || claims.RegisteredClaims.Subject == "" {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
 	}
 	resumes, err := h.Repo.GetResumesByUserID(
 		r.Context(),
-		claims.RegisteredClaims.Subject,
+		userID,
 	)
 	if err != nil {
 		http.Error(w, "Resumes not found", http.StatusNotFound)
@@ -40,12 +37,11 @@ func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ResumeHandler) PostResume(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
-	if !ok || claims == nil || claims.RegisteredClaims.Subject == "" {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
 	}
-	userID := claims.RegisteredClaims.Subject
 	var resume model.Resume
 	if err := json.NewDecoder(r.Body).Decode(&resume); err != nil {
 		log.Printf("post resume: %v %v", resume, err)
@@ -70,7 +66,13 @@ func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.Repo.UpdateResume(r.Context(), &resume)
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+
+	err := h.Repo.UpdateResume(r.Context(), &resume, userID)
 	if err != nil {
 		http.Error(w, "Failed to update resume", http.StatusInternalServerError)
 		return

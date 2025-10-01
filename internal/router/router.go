@@ -47,6 +47,8 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 					resumeHandler.PostResume(w, r)
 				case http.MethodPut:
 					resumeHandler.PutResume(w, r)
+				case http.MethodDelete:
+					resumeHandler.DeleteResumes(w, r)
 				default:
 					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 				}
