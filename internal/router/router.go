@@ -14,6 +14,8 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 
 	profileRepo := repository.NewProfileRepository(pool)
 	profileHandler := handler.NewProfileHandler(profileRepo)
+	resumeRepo := repository.NewResumeRepository(pool)
+	resumeHandler := handler.NewResumeHandler(resumeRepo)
 
 	mux.HandleFunc("/api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		middleware.CoreAuthenticated(
@@ -28,6 +30,23 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 				case http.MethodPut:
 					profileHandler.PutUserProfile(w, r)
 					return
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/resumes", func(w http.ResponseWriter, r *http.Request) {
+		middleware.CoreAuthenticated(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					resumeHandler.GetUserResumes(w, r)
+				case http.MethodPost:
+					resumeHandler.PostResume(w, r)
+				case http.MethodPut:
+					resumeHandler.PutResume(w, r)
 				default:
 					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 				}
