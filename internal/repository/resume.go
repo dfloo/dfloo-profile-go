@@ -278,11 +278,13 @@ func (r *ResumeRepository) UpdateResume(
 func (r *ResumeRepository) DeleteResumes(
 	ctx context.Context,
 	resumeIDs []string,
+	userID string,
 ) error {
 	_, err := r.Pool.Exec(
 		ctx,
-		`DELETE FROM resume WHERE resume_id = ANY($1)`,
+		`DELETE FROM resume WHERE resume_id = ANY($1) AND user_id = $2`,
 		resumeIDs,
+		userID,
 	)
 	return err
 }

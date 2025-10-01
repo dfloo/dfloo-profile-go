@@ -19,6 +19,7 @@ func NewResumeHandler(repo *repository.ResumeRepository) *ResumeHandler {
 }
 
 func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
@@ -30,13 +31,14 @@ func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		http.Error(w, "Resumes not found", http.StatusNotFound)
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resumes)
 }
 
 func (h *ResumeHandler) PostResume(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
@@ -54,12 +56,12 @@ func (h *ResumeHandler) PostResume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create resume", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(&resume)
 }
 
 func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	var resume model.Resume
 	if err := json.NewDecoder(r.Body).Decode(&resume); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -78,7 +80,6 @@ func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(&resume)
 }
 
@@ -89,7 +90,13 @@ func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Repo.DeleteResumes(r.Context(), resumeIDs); err != nil {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.Repo.DeleteResumes(r.Context(), resumeIDs, userID); err != nil {
 		http.Error(w, "Failed to delete resumes", http.StatusInternalServerError)
 		return
 	}
