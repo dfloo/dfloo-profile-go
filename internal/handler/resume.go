@@ -1,0 +1,103 @@
+package handler
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+
+	"github.com/dfloo/dfloo-profile-go/internal/middleware"
+	"github.com/dfloo/dfloo-profile-go/internal/model"
+	"github.com/dfloo/dfloo-profile-go/internal/repository"
+)
+
+type ResumeHandler struct {
+	Repo *repository.ResumeRepository
+}
+
+func NewResumeHandler(repo *repository.ResumeRepository) *ResumeHandler {
+	return &ResumeHandler{Repo: repo}
+}
+
+func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+	resumes, err := h.Repo.GetResumesByUserID(
+		r.Context(),
+		userID,
+	)
+	if err != nil {
+		http.Error(w, "Resumes not found", http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resumes)
+}
+
+func (h *ResumeHandler) PostResume(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+	var resume model.Resume
+	if err := json.NewDecoder(r.Body).Decode(&resume); err != nil {
+		log.Printf("post resume: %v %v", resume, err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err := h.Repo.CreateResume(r.Context(), &resume, userID)
+	if err != nil {
+		http.Error(w, "Failed to create resume", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(&resume)
+}
+
+func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	var resume model.Resume
+	if err := json.NewDecoder(r.Body).Decode(&resume); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+
+	err := h.Repo.UpdateResume(r.Context(), &resume, userID)
+	if err != nil {
+		http.Error(w, "Failed to update resume", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(&resume)
+}
+
+func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
+	var resumeIDs []string
+	if err := json.NewDecoder(r.Body).Decode(&resumeIDs); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.Repo.DeleteResumes(r.Context(), resumeIDs, userID); err != nil {
+		http.Error(w, "Failed to delete resumes", http.StatusInternalServerError)
+		return
+	}
+}
