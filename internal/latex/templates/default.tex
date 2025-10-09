@@ -1,0 +1,73 @@
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{multicol}
+\usepackage{enumitem}
+\usepackage[colorlinks=true, urlcolor=blue]{hyperref}
+\usepackage[margin=2cm]{geometry}
+\usepackage[none]{hyphenat}
+\usepackage{titlesec}
+
+\pagestyle{empty}
+\titlespacing*{\section}{0pt}{0.75em}{0.75em}
+
+\newcommand{\SocialAccounts}{
+    {{range $index, $item := .Profile.SocialAccounts}}
+        {{if $index}} $|$ {{end}} \href{ {{ .Href }} }{ {{ .Label -}} }
+    {{end}}
+}
+
+\newcommand{\ProfileSection}{
+    \section*{\centering {{ .FullName }} }
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r}
+        {{ .Address }} & {{ .Profile.Email }} \\
+        {{ .Profile.PhoneNumber}} & \SocialAccounts
+    \end{tabular*}
+    \noindent\makebox[\linewidth]{\rule{\textwidth}{.2pt}}
+}
+
+\newcommand{\SummarySection}{
+    {{ .Summary }}
+}
+
+\newcommand{\SkillsSection}{
+    {{ if len .Skills }}
+        \begin{multicols}{2}
+            \begin{itemize}[itemsep=0pt, parsep=0pt]
+                {{range .Skills}}\item {{ . }}{{end}}
+            \end{itemize}
+        \end{multicols}
+    {{end}}
+}
+
+\newcommand{\ExperienceSection}{
+    {{range .Experience}}\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r}
+        \textbf{ {{ .Title }} }- {{ .Employer }}, {{ .Location }} & {{ .StartDate }} - {{ .EndDate }}
+    \end{tabular*}
+    {{if len .Description}} \hspace*{0.5em}\textit{\fontsize{10}{10}\selectfont {{ .Description }} } {{end}}
+    \vspace{-0.5em}
+    \begin{itemize}[itemsep=0pt, parsep=0pt]
+        {{range .BulletPoints }}\item {{ . }}{{end}}
+    \end{itemize}
+    {{end}}
+}
+
+\newcommand{\EducationSection}{
+    {{range .Education}}\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r}
+        \textbf{ {{ .Type }} }- {{ .Name }}, {{ .Location }} & {{ .CompletionDate }}
+    \end{tabular*}
+    {{end}}
+}
+
+\begin{document}
+\title{ {{ .FullName }} - Resume }
+\author{ {{ .FullName }} }
+\date{ {{ .Date }} }
+\ProfileSection
+{{range .Sections}}
+    \section*{\centering\ {{ . }} }
+    {{if eq . "Summary"}}\SummarySection{{end}}
+    {{if eq . "Skills"}}\SkillsSection{{end}}
+    {{if eq . "Experience"}}\ExperienceSection{{end}}
+    {{if eq . "Education"}}\EducationSection{{end}} 
+{{end}}
+\end{document}

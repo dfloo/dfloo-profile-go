@@ -56,5 +56,11 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
+	mux.HandleFunc("/api/download/resume", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(resumeHandler.DownloadResumePDF),
+		).ServeHTTP(w, r)
+	})
+
 	return mux
 }
