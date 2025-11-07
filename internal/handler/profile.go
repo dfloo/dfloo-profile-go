@@ -10,10 +10,10 @@ import (
 )
 
 type ProfileHandler struct {
-	Repo *repository.ProfileRepository
+	Repo repository.ProfileRepository
 }
 
-func NewProfileHandler(repo *repository.ProfileRepository) *ProfileHandler {
+func NewProfileHandler(repo repository.ProfileRepository) *ProfileHandler {
 	return &ProfileHandler{Repo: repo}
 }
 
@@ -50,6 +50,8 @@ func (h *ProfileHandler) PostUserProfile(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Failed to create profile", http.StatusInternalServerError)
 		return
 	}
+	profile.ProfileID = middleware.EncodeID(profile.ProfileID)
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(&profile)
 }
@@ -66,11 +68,20 @@ func (h *ProfileHandler) PutUserProfile(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+	encoded := profile.ProfileID
+	decoded, err := middleware.DecodeID(profile.ProfileID)
+	if err != nil {
+		http.Error(w, "Failed to decode profileID", http.StatusInternalServerError)
+		return
+	}
+	profile.ProfileID = decoded
 
-	err := h.Repo.UpdateProfile(r.Context(), &profile, userID)
+	err = h.Repo.UpdateProfile(r.Context(), &profile, userID)
 	if err != nil {
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 		return
 	}
+	profile.ProfileID = encoded
+
 	json.NewEncoder(w).Encode(&profile)
 }

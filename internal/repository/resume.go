@@ -7,15 +7,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type ResumeRepository struct {
+type ResumeRepository interface {
+	GetResumesByUserID(ctx context.Context, userID string) ([]*model.Resume, error)
+	CreateResume(ctx context.Context, resume *model.Resume, userID string) error
+	UpdateResume(ctx context.Context, resume *model.Resume, userID string) error
+	DeleteResumes(ctx context.Context, resumeIDs []string, userID string) error
+}
+
+type DBResumeRepository struct {
 	Pool *pgxpool.Pool
 }
 
-func NewResumeRepository(pool *pgxpool.Pool) *ResumeRepository {
-	return &ResumeRepository{Pool: pool}
+func NewDBResumeRepository(pool *pgxpool.Pool) *DBResumeRepository {
+	return &DBResumeRepository{Pool: pool}
 }
 
-func (r *ResumeRepository) GetResumesByUserID(
+func (r *DBResumeRepository) GetResumesByUserID(
 	ctx context.Context,
 	userID string,
 ) ([]*model.Resume, error) {
@@ -102,7 +109,7 @@ func (r *ResumeRepository) GetResumesByUserID(
 	return resumes, nil
 }
 
-func (r *ResumeRepository) CreateResume(
+func (r *DBResumeRepository) CreateResume(
 	ctx context.Context,
 	resume *model.Resume,
 	userID string,
@@ -194,7 +201,7 @@ func (r *ResumeRepository) CreateResume(
 	return nil
 }
 
-func (r *ResumeRepository) UpdateResume(
+func (r *DBResumeRepository) UpdateResume(
 	ctx context.Context,
 	resume *model.Resume,
 	userID string,
@@ -216,7 +223,7 @@ func (r *ResumeRepository) UpdateResume(
 			file_name = $6,
 			sections = $7,
 			template_settings = $8
-		 WHERE resume_id = $9 AND user_id = $10 RETURNING updated`,
+		 WHERE resume_id = $9 AND user_id = $10 RETURNING created, updated`,
 		resume.Education,
 		resume.Experience,
 		resume.Skills,
@@ -227,7 +234,7 @@ func (r *ResumeRepository) UpdateResume(
 		resume.TemplateSettings,
 		resume.ResumeID,
 		userID,
-	).Scan(&resume.Updated)
+	).Scan(&resume.Created, &resume.Updated)
 
 	if err != nil {
 		return err
@@ -248,7 +255,7 @@ func (r *ResumeRepository) UpdateResume(
             zip_code = $10,
             country = $11,
             social_accounts = $12
-         WHERE profile_id = $13 RETURNING updated`,
+         WHERE profile_id = $13 RETURNING created, updated`,
 		resume.Profile.PhoneNumber,
 		resume.Profile.Email,
 		resume.Profile.FirstName,
@@ -262,7 +269,7 @@ func (r *ResumeRepository) UpdateResume(
 		resume.Profile.Country,
 		resume.Profile.SocialAccounts,
 		resume.Profile.ProfileID,
-	).Scan(&resume.Profile.Updated)
+	).Scan(&resume.Profile.Created, &resume.Profile.Updated)
 	if err != nil {
 		return err
 	}
@@ -275,7 +282,7 @@ func (r *ResumeRepository) UpdateResume(
 	return nil
 }
 
-func (r *ResumeRepository) DeleteResumes(
+func (r *DBResumeRepository) DeleteResumes(
 	ctx context.Context,
 	resumeIDs []string,
 	userID string,
