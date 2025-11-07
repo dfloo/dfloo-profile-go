@@ -7,15 +7,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type ProfileRepository struct {
+type ProfileRepository interface {
+	GetProfileByUserID(ctx context.Context, userID string) (*model.Profile, error)
+	CreateUserProfile(ctx context.Context, profile *model.Profile, userID string) error
+	UpdateProfile(ctx context.Context, profile *model.Profile, userID string) error
+}
+
+type DBProfileRepository struct {
 	Pool *pgxpool.Pool
 }
 
-func NewProfileRepository(pool *pgxpool.Pool) *ProfileRepository {
-	return &ProfileRepository{Pool: pool}
+func NewDBProfileRepository(pool *pgxpool.Pool) *DBProfileRepository {
+	return &DBProfileRepository{Pool: pool}
 }
 
-func (r *ProfileRepository) GetProfileByUserID(
+func (r *DBProfileRepository) GetProfileByUserID(
 	ctx context.Context,
 	userID string,
 ) (*model.Profile, error) {
@@ -64,7 +70,7 @@ func (r *ProfileRepository) GetProfileByUserID(
 	return &profile, nil
 }
 
-func (r *ProfileRepository) CreateUserProfile(
+func (r *DBProfileRepository) CreateUserProfile(
 	ctx context.Context,
 	profile *model.Profile,
 	userID string,
@@ -112,7 +118,7 @@ func (r *ProfileRepository) CreateUserProfile(
 	return nil
 }
 
-func (r *ProfileRepository) UpdateProfile(
+func (r *DBProfileRepository) UpdateProfile(
 	ctx context.Context,
 	profile *model.Profile,
 	userID string,
@@ -132,7 +138,7 @@ func (r *ProfileRepository) UpdateProfile(
             zip_code = $10,
             country = $11,
             social_accounts = $12
-        WHERE user_id = $13 RETURNING updated`,
+        WHERE user_id = $13 RETURNING created, updated`,
 		profile.PhoneNumber,
 		profile.Email,
 		profile.FirstName,
@@ -146,7 +152,7 @@ func (r *ProfileRepository) UpdateProfile(
 		profile.Country,
 		profile.SocialAccounts,
 		userID,
-	).Scan(&profile.Updated)
+	).Scan(&profile.Created, &profile.Updated)
 	if err != nil {
 		return err
 	}

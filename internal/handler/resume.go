@@ -17,10 +17,10 @@ import (
 )
 
 type ResumeHandler struct {
-	Repo *repository.ResumeRepository
+	Repo repository.ResumeRepository
 }
 
-func NewResumeHandler(repo *repository.ResumeRepository) *ResumeHandler {
+func NewResumeHandler(repo repository.ResumeRepository) *ResumeHandler {
 	return &ResumeHandler{Repo: repo}
 }
 
@@ -42,6 +42,7 @@ func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
 
 	for i := range resumes {
 		resumes[i].ResumeID = middleware.EncodeID(resumes[i].ResumeID)
+		resumes[i].Profile.ProfileID = middleware.EncodeID(resumes[i].Profile.ProfileID)
 	}
 
 	json.NewEncoder(w).Encode(resumes)
@@ -67,6 +68,7 @@ func (h *ResumeHandler) PostResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resume.ResumeID = middleware.EncodeID(resume.ResumeID)
+	resume.Profile.ProfileID = middleware.EncodeID(resume.Profile.ProfileID)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(&resume)
@@ -86,20 +88,28 @@ func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	encoded := resume.ResumeID
-	decoded, err := middleware.DecodeID(resume.ResumeID)
+	encodedResumeID := resume.ResumeID
+	encodedProfileID := resume.Profile.ProfileID
+	decodedResumeID, err := middleware.DecodeID(resume.ResumeID)
 	if err != nil {
 		http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
 		return
 	}
-	resume.ResumeID = decoded
+	decodedProfileID, err := middleware.DecodeID(resume.Profile.ProfileID)
+	if err != nil {
+		http.Error(w, "Failed to decode profileID", http.StatusInternalServerError)
+		return
+	}
+	resume.ResumeID = decodedResumeID
+	resume.Profile.ProfileID = decodedProfileID
 
 	err = h.Repo.UpdateResume(r.Context(), &resume, userID)
 	if err != nil {
 		http.Error(w, "Failed to update resume", http.StatusInternalServerError)
 		return
 	}
-	resume.ResumeID = encoded
+	resume.ResumeID = encodedResumeID
+	resume.Profile.ProfileID = encodedProfileID
 
 	json.NewEncoder(w).Encode(&resume)
 }
