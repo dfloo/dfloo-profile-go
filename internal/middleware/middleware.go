@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"net/http"
 	"net/url"
@@ -110,4 +111,14 @@ func GetUserID(c context.Context) string {
 		return ""
 	}
 	return claims.RegisteredClaims.Subject
+}
+
+func EncodeID(id string) string {
+	return base64.StdEncoding.EncodeToString([]byte(id))
+}
+
+func DecodeID(id string) (string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(id)
+
+	return string(decoded), err
 }

@@ -2,7 +2,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      # dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
      - "8080:8080"
     environment:
@@ -15,6 +16,8 @@ services:
         condition: service_healthy
     networks:
      - dfloo-network
+    volumes:
+     - .:/app
   db:
     image: postgres
     restart: always
