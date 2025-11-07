@@ -139,21 +139,31 @@ func (h *ResumeHandler) DownloadResumePDF(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	hash, _ := ResumeHash(&resume)
-	cachedPath := "/tmp/resume_cache/" + hash + ".pdf"
+	hash, err := ResumeHash(&resume)
+	if err != nil {
+		http.Error(w, "Failed to generate resume hash", http.StatusInternalServerError)
+		return
+	}
+
+	cachePath := "/tmp/resume_cache/"
+	cachedHashPath := cachePath + hash + ".pdf"
 	var pdfBytes []byte
-	if _, err := os.Stat(cachedPath); err == nil {
+	if _, err := os.Stat(cachedHashPath); err == nil {
 		log.Print("Serving cached resume pdf")
-		pdfBytes, _ = os.ReadFile(cachedPath)
+		pdfBytes, _ = os.ReadFile(cachedHashPath)
 	} else {
 		log.Print("Generating resume pdf")
 		filePath, _ := latex.GenerateFromResume(&resume)
-		pdfBytes, _ = latex.ConvertToPDF(filePath)
-		os.MkdirAll("/tmp/resume_cache", 0755)
-		os.WriteFile(cachedPath, pdfBytes, 0644)
+		pdfBytes, err = latex.ConvertToPDF(filePath)
+		if err != nil {
+			http.Error(w, "Failed to generate resume PDF", http.StatusInternalServerError)
+			return
+		}
+		os.MkdirAll(cachePath, 0755)
+		os.WriteFile(cachedHashPath, pdfBytes, 0644)
 		defer os.RemoveAll(filePath[:len(filePath)-len("resume.tex")])
 	}
-	CleanUpOldCacheFiles("/tmp/resume_cache", 24*time.Hour)
+	CleanUpOldCacheFiles(cachePath, 24*time.Hour)
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "attachment; filename=resume.pdf")

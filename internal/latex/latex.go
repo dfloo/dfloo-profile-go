@@ -22,7 +22,7 @@ type TemplateData struct {
 }
 
 func GenerateFromResume(resume *model.Resume) (string, error) {
-	template, err := template.ParseFiles("/app/internal/latex/templates/default.tex")
+	template, err := template.ParseFiles("internal/latex/templates/default.tex")
 	if err != nil {
 		log.Printf("Error parsing template: %v", err)
 		return "", err
@@ -78,7 +78,7 @@ func FormatTemplateData(resume *model.Resume) TemplateData {
 	return TemplateData{
 		Resume:     *resume,
 		FullName:   FormatFullName(&resume.Profile),
-		Date:       resume.Updated.Format("MM-dd-yyyy"),
+		Date:       resume.Updated.Format("01-02-2006"),
 		Address:    FormatAddress(&resume.Profile),
 		Experience: FormatExperience(resume.Experience),
 		Education:  FormatEducation(resume.Education),
