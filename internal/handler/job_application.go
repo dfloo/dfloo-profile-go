@@ -60,7 +60,9 @@ func (h *JobApplicationHandler) PostJobApplication(w http.ResponseWriter, r *htt
 		return
 	}
 	jobApplication.JobApplicationID = middleware.EncodeID(jobApplication.JobApplicationID)
-	jobApplication.ResumeID = middleware.EncodeID(jobApplication.ResumeID)
+	if jobApplication.ResumeID != "" {
+		jobApplication.ResumeID = middleware.EncodeID(jobApplication.ResumeID)
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(&jobApplication)
@@ -100,13 +102,16 @@ func (h *JobApplicationHandler) PutJobApplications(w http.ResponseWriter, r *htt
 			http.Error(w, "Failed to decode jobApplicationID", http.StatusInternalServerError)
 			return
 		}
-		decodedResumeID, err := middleware.DecodeID(jobApplication.ResumeID)
-		if err != nil {
-			http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
-			return
-		}
 		jobApplication.JobApplicationID = decodedJobApplicationID
-		jobApplication.ResumeID = decodedResumeID
+
+		if jobApplication.ResumeID != "" {
+			decodedResumeID, err := middleware.DecodeID(jobApplication.ResumeID)
+			if err != nil {
+				http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
+				return
+			}
+			jobApplication.ResumeID = decodedResumeID
+		}
 	}
 
 	err := h.Repo.UpdateJobApplications(r.Context(), jobApplications, userID)
