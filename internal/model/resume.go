@@ -13,6 +13,7 @@ type Resume struct {
 	Education        []Education      `json:"education"`
 	FileName         string           `json:"fileName"`
 	TemplateSettings TemplateSettings `json:"templateSettings"`
+	Default          bool             `json:"default"`
 	Created          time.Time        `json:"created"`
 	Updated          time.Time        `json:"updated"`
 }

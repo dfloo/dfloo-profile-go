@@ -9,6 +9,8 @@ import (
 
 type ResumeRepository interface {
 	GetResumesByUserID(ctx context.Context, userID string) ([]*model.Resume, error)
+	GetResumeByID(ctx context.Context, resumeID, userID string) (*model.Resume, error)
+	GetDefaultResume(ctx context.Context) (*model.Resume, error)
 	CreateResume(ctx context.Context, resume *model.Resume, userID string) error
 	UpdateResume(ctx context.Context, resume *model.Resume, userID string) error
 	DeleteResumes(ctx context.Context, resumeIDs []string, userID string) error
@@ -20,6 +22,162 @@ type DBResumeRepository struct {
 
 func NewDBResumeRepository(pool *pgxpool.Pool) *DBResumeRepository {
 	return &DBResumeRepository{Pool: pool}
+}
+
+func (r *DBResumeRepository) GetResumeByID(
+	ctx context.Context,
+	resumeID string,
+	userID string,
+) (*model.Resume, error) {
+	var resume model.Resume
+	var profile model.Profile
+	row := r.Pool.QueryRow(
+		ctx,
+		`SELECT
+            resume.resume_id,
+            resume.sections,
+            resume.summary,
+            resume.skills,
+            resume.experience,
+            resume.education,
+            resume.file_name,
+            resume.template_settings,
+			resume.description,
+			resume.defaultResume,
+			resume.created,
+			resume.updated,
+            profile.profile_id,
+            profile.phone_number,
+            profile.email,
+            profile.first_name,
+            profile.middle_name,
+            profile.last_name,
+            profile.address_1,
+            profile.address_2,
+            profile.city,
+            profile.state,
+            profile.zip_code,
+            profile.country,
+            profile.social_accounts,
+			profile.created,
+			profile.updated
+         FROM resume
+         LEFT JOIN profile ON resume.profile_id = profile.profile_id
+         WHERE resume.resume_id = $1 AND resume.user_id = $2;`,
+		resumeID,
+		userID,
+	)
+	err := row.Scan(
+		&resume.ResumeID,
+		&resume.Sections,
+		&resume.Summary,
+		&resume.Skills,
+		&resume.Experience,
+		&resume.Education,
+		&resume.FileName,
+		&resume.TemplateSettings,
+		&resume.Description,
+		&resume.Default,
+		&resume.Created,
+		&resume.Updated,
+		&profile.ProfileID,
+		&profile.PhoneNumber,
+		&profile.Email,
+		&profile.FirstName,
+		&profile.MiddleName,
+		&profile.LastName,
+		&profile.Address1,
+		&profile.Address2,
+		&profile.City,
+		&profile.State,
+		&profile.ZipCode,
+		&profile.Country,
+		&profile.SocialAccounts,
+		&profile.Created,
+		&profile.Updated,
+	)
+	if err != nil {
+		return nil, err
+	}
+	resume.Profile = profile
+
+	return &resume, nil
+}
+
+func (r *DBResumeRepository) GetDefaultResume(
+	ctx context.Context,
+) (*model.Resume, error) {
+	var resume model.Resume
+	var profile model.Profile
+	row := r.Pool.QueryRow(
+		ctx,
+		`SELECT
+            resume.resume_id,
+            resume.sections,
+            resume.summary,
+            resume.skills,
+            resume.experience,
+            resume.education,
+            resume.file_name,
+            resume.template_settings,
+			resume.description,
+			resume.defaultResume,
+			resume.created,
+			resume.updated,
+            profile.profile_id,
+            profile.phone_number,
+            profile.email,
+            profile.first_name,
+            profile.middle_name,
+            profile.last_name,
+            profile.address_1,
+            profile.address_2,
+            profile.city,
+            profile.state,
+            profile.zip_code,
+            profile.country,
+            profile.social_accounts,
+			profile.created,
+			profile.updated
+         FROM resume
+         LEFT JOIN profile ON resume.profile_id = profile.profile_id
+         WHERE resume.defaultResume = TRUE;`,
+	)
+	err := row.Scan(
+		&resume.ResumeID,
+		&resume.Sections,
+		&resume.Summary,
+		&resume.Skills,
+		&resume.Experience,
+		&resume.Education,
+		&resume.FileName,
+		&resume.TemplateSettings,
+		&resume.Description,
+		&resume.Default,
+		&resume.Created,
+		&resume.Updated,
+		&profile.ProfileID,
+		&profile.PhoneNumber,
+		&profile.Email,
+		&profile.FirstName,
+		&profile.MiddleName,
+		&profile.LastName,
+		&profile.Address1,
+		&profile.Address2,
+		&profile.City,
+		&profile.State,
+		&profile.ZipCode,
+		&profile.Country,
+		&profile.SocialAccounts,
+		&profile.Created,
+		&profile.Updated,
+	)
+	if err != nil {
+		return nil, err
+	}
+	resume.Profile = profile
+
+	return &resume, nil
 }
 
 func (r *DBResumeRepository) GetResumesByUserID(
@@ -38,6 +196,7 @@ func (r *DBResumeRepository) GetResumesByUserID(
             resume.file_name,
             resume.template_settings,
 			resume.description,
+			resume.defaultResume,
 			resume.created,
 			resume.updated,
             profile.profile_id,
@@ -79,6 +238,7 @@ func (r *DBResumeRepository) GetResumesByUserID(
 			&resume.FileName,
 			&resume.TemplateSettings,
 			&resume.Description,
+			&resume.Default,
 			&resume.Created,
 			&resume.Updated,
 			&profile.ProfileID,
@@ -219,15 +379,17 @@ func (r *DBResumeRepository) UpdateResume(
 			experience = $2,
 			skills = $3,
 			description = $4,
-			summary = $5,
-			file_name = $6,
-			sections = $7,
-			template_settings = $8
-		 WHERE resume_id = $9 AND user_id = $10 RETURNING created, updated`,
+			defaultResume = $5,
+			summary = $6,
+			file_name = $7,
+			sections = $8,
+			template_settings = $9
+		 WHERE resume_id = $10 AND user_id = $11 RETURNING created, updated`,
 		resume.Education,
 		resume.Experience,
 		resume.Skills,
 		resume.Description,
+		resume.Default,
 		resume.Summary,
 		resume.FileName,
 		resume.Sections,
