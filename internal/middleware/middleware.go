@@ -47,7 +47,8 @@ func CORS(next http.Handler) http.Handler {
 }
 
 type CustomClaims struct {
-	Scope string `json:"scope"`
+	Scope       string   `json:"scope"`
+	Permissions []string `json:"permissions"`
 }
 
 // Validate does nothing for now, but we need
@@ -103,6 +104,29 @@ func EnsureValidToken(next http.Handler) http.Handler {
 		jwtValidator.ValidateToken,
 		jwtmiddleware.WithErrorHandler(errorHandler),
 	).CheckJWT(next)
+}
+
+func GetPermissions(ctx context.Context) []string {
+	claims, ok := ctx.Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
+	if !ok || claims == nil {
+		return nil
+	}
+	customClaims, ok := claims.CustomClaims.(*CustomClaims)
+	if !ok || customClaims == nil {
+		return nil
+	}
+
+	return customClaims.Permissions
+}
+
+func HasPermission(ctx context.Context, permission string) bool {
+	perms := GetPermissions(ctx)
+	for _, p := range perms {
+		if p == permission {
+			return true
+		}
+	}
+	return false
 }
 
 func GetUserID(c context.Context) string {

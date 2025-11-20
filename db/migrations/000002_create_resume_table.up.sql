@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS resume (
     FOREIGN KEY (profile_id) REFERENCES profile(profile_id),
     sections TEXT[],
     description TEXT,
+    defaultResume BOOLEAN NOT NULL DEFAULT FALSE,
     summary TEXT,
     skills TEXT[],
     experience JSONB,
@@ -14,6 +15,10 @@ CREATE TABLE IF NOT EXISTS resume (
     created TIMESTAMP NOT NULL DEFAULT NOW(),
     updated TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX only_one_default
+ON resume((TRUE))
+WHERE defaultResume = TRUE;
 
 DO $$
 BEGIN

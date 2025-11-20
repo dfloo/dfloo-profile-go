@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -10,16 +11,24 @@ import (
 )
 
 type JobApplicationHandler struct {
-	Repo repository.JobApplicationRepository
+	Repo      repository.JobApplicationRepository
+	GetUserID func(context.Context) string
+	EncodeID  func(string) string
+	DecodeID  func(string) (string, error)
 }
 
 func NewJobApplicationHandler(repo repository.JobApplicationRepository) *JobApplicationHandler {
-	return &JobApplicationHandler{Repo: repo}
+	return &JobApplicationHandler{
+		Repo:      repo,
+		GetUserID: middleware.GetUserID,
+		EncodeID:  middleware.EncodeID,
+		DecodeID:  middleware.DecodeID,
+	}
 }
 
 func (h *JobApplicationHandler) GetUserJobApplications(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	userID := middleware.GetUserID(r.Context())
+	userID := h.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
@@ -31,9 +40,9 @@ func (h *JobApplicationHandler) GetUserJobApplications(w http.ResponseWriter, r 
 	}
 
 	for i := range jobApplications {
-		jobApplications[i].JobApplicationID = middleware.EncodeID(jobApplications[i].JobApplicationID)
+		jobApplications[i].JobApplicationID = h.EncodeID(jobApplications[i].JobApplicationID)
 		if jobApplications[i].ResumeID != "" {
-			jobApplications[i].ResumeID = middleware.EncodeID(jobApplications[i].ResumeID)
+			jobApplications[i].ResumeID = h.EncodeID(jobApplications[i].ResumeID)
 		}
 	}
 
@@ -42,7 +51,7 @@ func (h *JobApplicationHandler) GetUserJobApplications(w http.ResponseWriter, r 
 
 func (h *JobApplicationHandler) PostJobApplication(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	userID := middleware.GetUserID(r.Context())
+	userID := h.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
@@ -59,9 +68,9 @@ func (h *JobApplicationHandler) PostJobApplication(w http.ResponseWriter, r *htt
 		http.Error(w, "Failed to create Job Application", http.StatusInternalServerError)
 		return
 	}
-	jobApplication.JobApplicationID = middleware.EncodeID(jobApplication.JobApplicationID)
+	jobApplication.JobApplicationID = h.EncodeID(jobApplication.JobApplicationID)
 	if jobApplication.ResumeID != "" {
-		jobApplication.ResumeID = middleware.EncodeID(jobApplication.ResumeID)
+		jobApplication.ResumeID = h.EncodeID(jobApplication.ResumeID)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -77,7 +86,7 @@ func (h *JobApplicationHandler) PutJobApplications(w http.ResponseWriter, r *htt
 		return
 	}
 
-	userID := middleware.GetUserID(r.Context())
+	userID := h.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
 		return
@@ -97,7 +106,7 @@ func (h *JobApplicationHandler) PutJobApplications(w http.ResponseWriter, r *htt
 			resumeID:         jobApplication.ResumeID,
 		}
 
-		decodedJobApplicationID, err := middleware.DecodeID(jobApplication.JobApplicationID)
+		decodedJobApplicationID, err := h.DecodeID(jobApplication.JobApplicationID)
 		if err != nil {
 			http.Error(w, "Failed to decode jobApplicationID", http.StatusInternalServerError)
 			return
@@ -105,7 +114,7 @@ func (h *JobApplicationHandler) PutJobApplications(w http.ResponseWriter, r *htt
 		jobApplication.JobApplicationID = decodedJobApplicationID
 
 		if jobApplication.ResumeID != "" {
-			decodedResumeID, err := middleware.DecodeID(jobApplication.ResumeID)
+			decodedResumeID, err := h.DecodeID(jobApplication.ResumeID)
 			if err != nil {
 				http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
 				return
