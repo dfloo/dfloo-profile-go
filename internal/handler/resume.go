@@ -157,6 +157,7 @@ func (h *ResumeHandler) SetDefaultResume(w http.ResponseWriter, r *http.Request)
 		err = h.Repo.UpdateResume(r.Context(), prevDefault, userID)
 		if err != nil {
 			http.Error(w, "Failed to update previous default resume", http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -169,9 +170,10 @@ func (h *ResumeHandler) SetDefaultResume(w http.ResponseWriter, r *http.Request)
 	err = h.Repo.UpdateResume(r.Context(), newDefault, userID)
 	if err != nil {
 		http.Error(w, "Failed to update default resume", http.StatusInternalServerError)
+		return
 	}
 	newDefault.ResumeID = req.ResumeID
-	newDefault.Profile.ProfileID = h.EncodeID((newDefault.Profile.ProfileID))
+	newDefault.Profile.ProfileID = h.EncodeID(newDefault.Profile.ProfileID)
 
 	var result []*model.Resume
 	result = append(result, newDefault)
@@ -215,6 +217,7 @@ func (h *ResumeHandler) DownloadDefaultResumePDF(w http.ResponseWriter, r *http.
 	resume, err := h.Repo.GetDefaultResume(r.Context())
 	if err != nil {
 		http.Error(w, "Default resume not found", http.StatusNotFound)
+		return
 	}
 
 	DownloadResume(w, resume)

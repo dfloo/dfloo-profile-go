@@ -38,7 +38,7 @@ func (m *MockResumeRepository) GetResumesByUserID(ctx context.Context, userID st
 }
 
 func (m *MockResumeRepository) GetResumeByID(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
-	if m.GetResumesByUserIDFunc != nil {
+	if m.GetResumeByIDFunc != nil {
 		return m.GetResumeByIDFunc(ctx, resumeID, userID)
 	}
 	return nil, errors.New("GetResumeByID not implemented in mock")
