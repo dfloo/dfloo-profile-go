@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -461,8 +462,8 @@ func (r *DBResumeRepository) DeleteResumes(
 	defer tx.Rollback(ctx)
 
 	for i, resumeID := range resumeIDs {
-		savePoint := fmt.Sprintf("sp_%d", i)
-		_, err := tx.Exec(ctx, fmt.Sprintf("SAVEPOINT %s", savePoint))
+		savePoint := pgx.Identifier{"sp_" + fmt.Sprintf("%d", i)}
+		_, err := tx.Exec(ctx, "SAVEPOINT "+savePoint.Sanitize())
 		if err != nil {
 			return nil, err
 		}
@@ -478,7 +479,7 @@ func (r *DBResumeRepository) DeleteResumes(
 			if IsForeignKeyConstraint(err) {
 				_, rollbackErr := tx.Exec(
 					ctx,
-					fmt.Sprintf("ROLLBACK TO SAVEPOINT %s", savePoint),
+					"ROLLBACK TO SAVEPOINT "+savePoint.Sanitize(),
 				)
 				if rollbackErr != nil {
 					return nil, rollbackErr
@@ -487,16 +488,17 @@ func (r *DBResumeRepository) DeleteResumes(
 			} else {
 				return nil, err
 			}
-		} else {
-			_, releaseErr := tx.Exec(
-				ctx,
-				fmt.Sprintf("RELEASE SAVEPOINT %s", savePoint),
-			)
-			if releaseErr != nil {
-				return nil, releaseErr
-			}
-			deletedIDs = append(deletedIDs, resumeID)
 		}
+
+		_, releaseErr := tx.Exec(
+			ctx,
+			"RELEASE SAVEPOINT "+savePoint.Sanitize(),
+		)
+		if releaseErr != nil {
+			return nil, releaseErr
+		}
+
+		deletedIDs = append(deletedIDs, resumeID)
 	}
 
 	err = tx.Commit(ctx)
