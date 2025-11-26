@@ -27,7 +27,7 @@ type MockResumeRepository struct {
 	GetDefaultResumeFunc   func(ctx context.Context) (*model.Resume, error)
 	CreateResumeFunc       func(ctx context.Context, resume *model.Resume, userID string) error
 	UpdateResumeFunc       func(ctx context.Context, resume *model.Resume, userID string) error
-	DeleteResumesFunc      func(ctx context.Context, resumeIDs []string, userID string) error
+	DeleteResumesFunc      func(ctx context.Context, resumeIDs []string, userID string) ([]string, error)
 }
 
 func (m *MockResumeRepository) GetResumesByUserID(ctx context.Context, userID string) ([]*model.Resume, error) {
@@ -65,11 +65,11 @@ func (m *MockResumeRepository) UpdateResume(ctx context.Context, resume *model.R
 	return errors.New("UpdateResume not implemented in mock")
 }
 
-func (m *MockResumeRepository) DeleteResumes(ctx context.Context, resumeIDs []string, userID string) error {
+func (m *MockResumeRepository) DeleteResumes(ctx context.Context, resumeIDs []string, userID string) ([]string, error) {
 	if m.DeleteResumesFunc != nil {
 		return m.DeleteResumesFunc(ctx, resumeIDs, userID)
 	}
-	return errors.New("DeleteResumes not implemented in mock")
+	return nil, errors.New("DeleteResumes not implemented in mock")
 }
 
 func TestGetUserResumes_Success(t *testing.T) {
@@ -304,12 +304,12 @@ func TestPutResume_RepositoryError(t *testing.T) {
 
 func TestDeleteResumes_Success(t *testing.T) {
 	mockRepo := &MockResumeRepository{
-		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) error {
+		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) ([]string, error) {
 			expectedDecodedIDs := []string{"decoded", "decoded"}
 			if len(resumeIDs) != len(expectedDecodedIDs) {
-				return errors.New("unexpected number of IDs")
+				return nil, errors.New("unexpected number of IDs")
 			}
-			return nil
+			return resumeIDs, nil
 		},
 	}
 
@@ -322,6 +322,58 @@ func TestDeleteResumes_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var deletedIDs []string
+	err := json.NewDecoder(w.Body).Decode(&deletedIDs)
+	if err != nil {
+		t.Errorf("Failed to decode response: %v", err)
+	}
+
+	if len(deletedIDs) != 2 {
+		t.Errorf("Expected 2 deleted IDs, got %d", len(deletedIDs))
+	}
+
+	for _, id := range deletedIDs {
+		if id != "encoded" {
+			t.Errorf("Expected ID 'encoded', got '%s'", id)
+		}
+	}
+}
+
+func TestDeleteResumes_PartialSuccess(t *testing.T) {
+	mockRepo := &MockResumeRepository{
+		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) ([]string, error) {
+			if len(resumeIDs) >= 1 {
+				return []string{resumeIDs[0]}, nil
+			}
+			return []string{}, nil
+		},
+	}
+
+	resumeIDsJSON := `["resume1", "resume2"]`
+	handler := createTestResumeHandler(mockRepo)
+	req := testutil.CreateRequestWithBody("DELETE", "/resumes", resumeIDsJSON, "test")
+	w := httptest.NewRecorder()
+
+	handler.DeleteResumes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var deletedIDs []string
+	err := json.NewDecoder(w.Body).Decode(&deletedIDs)
+	if err != nil {
+		t.Errorf("Failed to decode response: %v", err)
+	}
+
+	if len(deletedIDs) != 1 {
+		t.Errorf("Expected 1 deleted ID, got %d", len(deletedIDs))
+	}
+
+	if deletedIDs[0] != "encoded" {
+		t.Errorf("Expected ID 'encoded', got '%s'", deletedIDs[0])
 	}
 }
 
@@ -364,8 +416,8 @@ func TestDeleteResumes_DecodeError(t *testing.T) {
 
 func TestDeleteResumes_RepositoryError(t *testing.T) {
 	mockRepo := &MockResumeRepository{
-		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) error {
-			return errors.New("delete failed")
+		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) ([]string, error) {
+			return nil, errors.New("delete failed")
 		},
 	}
 

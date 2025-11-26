@@ -186,6 +186,8 @@ func (h *ResumeHandler) SetDefaultResume(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	var resumeIDs []string
 	if err := json.NewDecoder(r.Body).Decode(&resumeIDs); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -199,18 +201,25 @@ func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := range resumeIDs {
-		decoded, err := h.DecodeID(resumeIDs[i])
+		decodedID, err := h.DecodeID(resumeIDs[i])
 		if err != nil {
 			http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
 			return
 		}
-		resumeIDs[i] = string(decoded)
+		resumeIDs[i] = decodedID
 	}
 
-	if err := h.Repo.DeleteResumes(r.Context(), resumeIDs, userID); err != nil {
+	deletedIDs, err := h.Repo.DeleteResumes(r.Context(), resumeIDs, userID)
+	if err != nil {
 		http.Error(w, "Failed to delete resumes", http.StatusInternalServerError)
 		return
 	}
+
+	for i := range deletedIDs {
+		deletedIDs[i] = h.EncodeID(deletedIDs[i])
+	}
+
+	json.NewEncoder(w).Encode(deletedIDs)
 }
 
 func (h *ResumeHandler) DownloadDefaultResumePDF(w http.ResponseWriter, r *http.Request) {
