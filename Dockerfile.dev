@@ -1,8 +1,0 @@
-FROM golang:latest
-
-WORKDIR /app
-RUN apt-get update && apt-get install -y texlive-latex-base texlive-latex-extra texlive-fonts-recommended
-COPY go.mod go.sum ./
-RUN go mod download
-
-CMD ["sh", "-c", "go run ./cmd/server"]

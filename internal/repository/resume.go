@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -13,7 +15,7 @@ type ResumeRepository interface {
 	GetDefaultResume(ctx context.Context) (*model.Resume, error)
 	CreateResume(ctx context.Context, resume *model.Resume, userID string) error
 	UpdateResume(ctx context.Context, resume *model.Resume, userID string) error
-	DeleteResumes(ctx context.Context, resumeIDs []string, userID string) error
+	DeleteResumes(ctx context.Context, resumeIDs []string, userID string) ([]string, error)
 }
 
 type DBResumeRepository struct {
@@ -448,12 +450,32 @@ func (r *DBResumeRepository) DeleteResumes(
 	ctx context.Context,
 	resumeIDs []string,
 	userID string,
-) error {
-	_, err := r.Pool.Exec(
-		ctx,
-		`DELETE FROM resume WHERE resume_id = ANY($1) AND user_id = $2`,
-		resumeIDs,
-		userID,
-	)
-	return err
+) ([]string, error) {
+	deletedIDs := make([]string, 0)
+
+	for _, resumeID := range resumeIDs {
+		_, err := r.Pool.Exec(
+			ctx,
+			`DELETE FROM resume WHERE resume_id = $1 AND user_id = $2`,
+			resumeID,
+			userID,
+		)
+
+		if err != nil {
+			if IsForeignKeyConstraint(err) {
+				continue
+			} else {
+				return nil, err
+			}
+		} else {
+			deletedIDs = append(deletedIDs, resumeID)
+		}
+	}
+
+	return deletedIDs, nil
+}
+
+func IsForeignKeyConstraint(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
