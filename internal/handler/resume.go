@@ -201,12 +201,12 @@ func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := range resumeIDs {
-		decoded, err := h.DecodeID(resumeIDs[i])
+		decodedID, err := h.DecodeID(resumeIDs[i])
 		if err != nil {
 			http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
 			return
 		}
-		resumeIDs[i] = decoded
+		resumeIDs[i] = decodedID
 	}
 
 	deletedIDs, err := h.Repo.DeleteResumes(r.Context(), resumeIDs, userID)
