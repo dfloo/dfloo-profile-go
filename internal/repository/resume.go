@@ -462,8 +462,8 @@ func (r *DBResumeRepository) DeleteResumes(
 	defer tx.Rollback(ctx)
 
 	for i, resumeID := range resumeIDs {
-		savePoint := pgx.Identifier{"sp_" + fmt.Sprintf("%d", i)}
-		_, err := tx.Exec(ctx, "SAVEPOINT "+savePoint.Sanitize())
+		savePoint := pgx.Identifier{fmt.Sprintf("sp_%d", i)}.Sanitize()
+		_, err := tx.Exec(ctx, "SAVEPOINT "+savePoint)
 		if err != nil {
 			return nil, err
 		}
@@ -479,23 +479,14 @@ func (r *DBResumeRepository) DeleteResumes(
 			if IsForeignKeyConstraint(err) {
 				_, rollbackErr := tx.Exec(
 					ctx,
-					"ROLLBACK TO SAVEPOINT "+savePoint.Sanitize(),
+					"ROLLBACK TO SAVEPOINT "+savePoint,
 				)
 				if rollbackErr != nil {
 					return nil, rollbackErr
 				}
 				continue
-			} else {
-				return nil, err
 			}
-		}
-
-		_, releaseErr := tx.Exec(
-			ctx,
-			"RELEASE SAVEPOINT "+savePoint.Sanitize(),
-		)
-		if releaseErr != nil {
-			return nil, releaseErr
+			return nil, err
 		}
 
 		deletedIDs = append(deletedIDs, resumeID)
