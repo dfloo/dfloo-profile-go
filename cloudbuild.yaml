@@ -27,6 +27,10 @@ steps:
       - $_SERVICE_NAME
       - "--platform=managed"
       - >-
+        --set-env-vars=AUTH0_AUDIENCE=$_AUTH0_AUDIENCE,AUTH0_DOMAIN=$_AUTH0_DOMAIN,CLIENT_ORIGIN=$_CLIENT_ORIGIN
+      - >-
+        --set-secrets=DATABASE_URL=DATABASE_URL:latest
+      - >-
         --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
       - >-
         --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID
