@@ -10,6 +10,14 @@ steps:
       - .
       - "-f"
       - Dockerfile
+    env:
+      - "AUTH0_AUDIENCE=$_AUTH0_AUDIENCE"
+      - "AUTH0_DOMAIN=$_AUTH0_DOMAIN"
+      - "CLIENT_ORIGIN=$_CLIENT_ORIGIN"
+      - "DATABASE_URL=$_DATABASE_URL"
+      - "POSTGRES_USER=$_POSTGRES_USER"
+      - "POSTGRES_PASSWORD=$_POSTGRES_PASSWORD"
+      - "POSTGRES_DB=$_POSTGRES_DB"
 
   - id: Push
     name: gcr.io/cloud-builders/docker
