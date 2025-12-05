@@ -5,9 +5,10 @@ steps:
       - build
       - "--no-cache"
       - "-t"
-      - >-
-        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
-      - .
+      - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
+      - "."
       - "-f"
       - Dockerfile
 
@@ -15,36 +16,202 @@ steps:
     name: gcr.io/cloud-builders/docker
     args:
       - push
-      - >-
-        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - "--all-tags"
+      - "gcr.io/$PROJECT_ID/dfloo-profile-go"
 
-  - id: Deploy
-    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+  - id: Get-Credentials
+    name: "gcr.io/cloud-builders/gcloud"
     args:
-      - run
-      - services
-      - update
-      - $_SERVICE_NAME
-      - "--platform=managed"
-      - >-
-        --set-env-vars=AUTH0_AUDIENCE=$_AUTH0_AUDIENCE,AUTH0_DOMAIN=$_AUTH0_DOMAIN,CLIENT_ORIGIN=$_CLIENT_ORIGIN
-      - >-
-        --set-secrets=DATABASE_URL=DATABASE_URL:latest
-      - >-
-        --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
-      - >-
-        --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID
-      - "--region=$_DEPLOY_REGION"
-      - "--quiet"
-    entrypoint: gcloud
+      - container
+      - clusters
+      - get-credentials
+      - dfloo-profile-cluster
+      - "--zone=us-west1"
+      - "--project=$PROJECT_ID"
+
+  - id: Apply-Manifests
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/namespace.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-ConfigMap
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/configmap.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-Secret-Provider
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/secret-provider.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-Postgres-PVC
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/postgres-pvc.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-Postgres
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/postgres.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Wait-Postgres
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - wait
+      - "--for=condition=ready"
+      - "pod"
+      - "-l"
+      - "app=postgres"
+      - "-n"
+      - "dfloo-profile"
+      - "--timeout=300s"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Create-Migrations-ConfigMap
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - create
+      - configmap
+      - db-migrations
+      - "--from-file=db/migrations/"
+      - "--namespace=dfloo-profile"
+      - "--dry-run=client"
+      - "-o"
+      - "yaml"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-Migrations-ConfigMap
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - "-"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Delete-Old-Migration-Job
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - delete
+      - job
+      - db-migration
+      - "-n"
+      - "dfloo-profile"
+      - "--ignore-not-found"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Run-Migrations
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/migration-job.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Wait-Migrations
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - wait
+      - "--for=condition=complete"
+      - "job/db-migration"
+      - "-n"
+      - "dfloo-profile"
+      - "--timeout=300s"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Update-API-Image
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - set
+      - image
+      - "deployment/dfloo-profile-api"
+      - "api=gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
+      - "-n"
+      - "dfloo-profile"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-API
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/api.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Wait-API
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - wait
+      - "--for=condition=ready"
+      - "pod"
+      - "-l"
+      - "app=dfloo-profile-api"
+      - "-n"
+      - "dfloo-profile"
+      - "--timeout=300s"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Get-Service
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - get
+      - service
+      - dfloo-profile-api
+      - "-n"
+      - "dfloo-profile"
+    env:
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
 images:
-  - >-
-    $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+  - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
+  - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
+
 options:
-  substitutionOption: ALLOW_LOOSE
   logging: CLOUD_LOGGING_ONLY
+
 tags:
-  - gcp-cloud-build-deploy-cloud-run
-  - gcp-cloud-build-deploy-cloud-run-managed
+  - gke-deployment
   - dfloo-profile-go
