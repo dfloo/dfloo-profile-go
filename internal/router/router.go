@@ -18,6 +18,9 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 	resumeHandler := handler.NewResumeHandler(resumeRepo)
 	jobApplicationRepo := repository.NewDBJobApplicationRepository(pool)
 	jobApplicationHandler := handler.NewJobApplicationHandler(jobApplicationRepo)
+	healthHandler := handler.NewHealthHandler(pool)
+
+	mux.HandleFunc("GET /health", healthHandler.HealthCheck)
 
 	mux.HandleFunc("/api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		middleware.CoreAuthenticated(

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: dfloo-profile
+data:
+  POSTGRES_DB: "dfloo_db"
+  AUTH0_AUDIENCE: "https://api.dfloo-profile.com"
+  AUTH0_DOMAIN: "dev-70prsgyhzrufsyhj.us.auth0.com"
+  CLIENT_ORIGIN: "https://dfloo-profile.com"
