@@ -8,9 +8,9 @@ steps:
       - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
       - "-t"
       - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
-      - "."
       - "-f"
       - Dockerfile
+      - "."
 
   - id: Push
     name: gcr.io/cloud-builders/docker

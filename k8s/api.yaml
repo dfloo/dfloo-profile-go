@@ -27,6 +27,7 @@ spec:
       labels:
         app: dfloo-profile-api
     spec:
+      serviceAccountName: ksa-secret-manager
       containers:
         - name: api
           image: gcr.io/dfloo-profile/dfloo-profile-go:latest
@@ -54,6 +55,10 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: CLIENT_ORIGIN
+          volumeMounts:
+            - name: secrets-store
+              mountPath: "/mnt/secrets"
+              readOnly: true
           resources:
             requests:
               memory: "256Mi"
@@ -77,3 +82,10 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: app-secrets-provider
