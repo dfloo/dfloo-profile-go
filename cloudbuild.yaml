@@ -26,7 +26,7 @@ steps:
       - clusters
       - get-credentials
       - dfloo-profile-cluster
-      - "--zone=us-west1"
+      - "--region=us-west1"
       - "--project=$PROJECT_ID"
 
   - id: Apply-Manifests
@@ -36,7 +36,7 @@ steps:
       - "-f"
       - k8s/namespace.yaml
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Apply-ConfigMap
@@ -46,7 +46,7 @@ steps:
       - "-f"
       - k8s/configmap.yaml
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Apply-Secret-Provider
@@ -56,7 +56,7 @@ steps:
       - "-f"
       - k8s/secret-provider.yaml
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Apply-Postgres-PVC
@@ -66,7 +66,7 @@ steps:
       - "-f"
       - k8s/postgres-pvc.yaml
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Apply-Postgres
@@ -76,7 +76,7 @@ steps:
       - "-f"
       - k8s/postgres.yaml
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Wait-Postgres
@@ -91,32 +91,21 @@ steps:
       - "dfloo-profile"
       - "--timeout=300s"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
-  - id: Create-Migrations-ConfigMap
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - create
-      - configmap
-      - db-migrations
-      - "--from-file=db/migrations/"
-      - "--namespace=dfloo-profile"
-      - "--dry-run=client"
-      - "-o"
-      - "yaml"
-    env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Apply-Migrations-ConfigMap
     name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
     args:
-      - apply
-      - "-f"
-      - "-"
+      - "-c"
+      - |
+        kubectl create configmap db-migrations \
+          --from-file=db/migrations/ \
+          --namespace=dfloo-profile \
+          --dry-run=client -o yaml | kubectl apply -f -
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Delete-Old-Migration-Job
@@ -129,7 +118,7 @@ steps:
       - "dfloo-profile"
       - "--ignore-not-found"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Run-Migrations
@@ -139,7 +128,7 @@ steps:
       - "-f"
       - k8s/migration-job.yaml
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Wait-Migrations
@@ -152,7 +141,17 @@ steps:
       - "dfloo-profile"
       - "--timeout=300s"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Apply-API
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/api.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Update-API-Image
@@ -165,17 +164,7 @@ steps:
       - "-n"
       - "dfloo-profile"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
-  - id: Apply-API
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - apply
-      - "-f"
-      - k8s/api.yaml
-    env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Wait-API
@@ -190,7 +179,7 @@ steps:
       - "dfloo-profile"
       - "--timeout=300s"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Get-Service
@@ -202,7 +191,7 @@ steps:
       - "-n"
       - "dfloo-profile"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-a"
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
 images:

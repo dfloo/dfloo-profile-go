@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "This will delete all resources in the dfloo-profile namespace"
-read -p "Continue? (Y/n): " -n 1 -r
+read -p "Continue? (Y/n): " -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Cancelled"

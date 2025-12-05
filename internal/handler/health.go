@@ -18,6 +18,7 @@ func NewHealthHandler(pool *pgxpool.Pool) *HealthHandler {
 }
 
 func (h *HealthHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 

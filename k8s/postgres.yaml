@@ -27,7 +27,6 @@ spec:
       labels:
         app: postgres
     spec:
-      serviceAccountName: ksa-secret-manager
       containers:
         - name: postgres
           image: postgres:15
@@ -54,9 +53,6 @@ spec:
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
-            - name: secrets-store
-              mountPath: "/mnt/secrets"
-              readOnly: true
           resources:
             requests:
               memory: "128Mi"
@@ -67,9 +63,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - sh
-                - -c
-                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+                - pg_isready
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -77,9 +71,7 @@ spec:
           readinessProbe:
             exec:
               command:
-                - sh
-                - -c
-                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+                - pg_isready
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -87,9 +79,3 @@ spec:
         - name: postgres-storage
           persistentVolumeClaim:
             claimName: postgres-pvc
-        - name: secrets-store
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: app-secrets-provider
