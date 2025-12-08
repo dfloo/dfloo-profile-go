@@ -83,10 +83,8 @@ steps:
     name: "gcr.io/cloud-builders/kubectl"
     args:
       - wait
-      - "--for=condition=ready"
-      - "pod"
-      - "-l"
-      - "app=postgres"
+      - "--for=condition=available"
+      - "deployment/postgres"
       - "-n"
       - "dfloo-profile"
       - "--timeout=300s"
@@ -167,14 +165,12 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Wait-API
+  - id: Wait-API-Rollout
     name: "gcr.io/cloud-builders/kubectl"
     args:
-      - wait
-      - "--for=condition=ready"
-      - "pod"
-      - "-l"
-      - "app=dfloo-profile-api"
+      - rollout
+      - status
+      - "deployment/dfloo-profile-api"
       - "-n"
       - "dfloo-profile"
       - "--timeout=300s"
