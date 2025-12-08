@@ -87,9 +87,9 @@ steps:
       - |
         echo "Waiting for PVC to bind..."
         for i in {1..30}; do
-          STATUS=$(kubectl get pvc postgres-pvc -n dfloo-profile -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-          echo "Attempt $i: PVC status is $STATUS"
-          if [ "$STATUS" = "Bound" ]; then
+          STATUS=$$(kubectl get pvc postgres-pvc -n dfloo-profile -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+          echo "Attempt $$i: PVC status is $$STATUS"
+          if [ "$$STATUS" = "Bound" ]; then
             echo "PVC is bound!"
             exit 0
           fi
