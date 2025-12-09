@@ -75,11 +75,15 @@ steps:
     args:
       - "-c"
       - |
+        set -e
+        set -o pipefail # Fail if kubectl create fails
+        echo "Creating app-secrets..."
         kubectl create secret generic app-secrets \
           --namespace=dfloo-profile \
-          --from-literal=POSTGRES_USER=$$POSTGRES_USER \
-          --from-literal=POSTGRES_PASSWORD=$$POSTGRES_PASSWORD \
+          --from-literal=POSTGRES_USER="$$POSTGRES_USER" \
+          --from-literal=POSTGRES_PASSWORD="$$POSTGRES_PASSWORD" \
           --dry-run=client -o yaml | kubectl apply -f -
+        echo "Secret created."
     secretEnv: ["POSTGRES_USER", "POSTGRES_PASSWORD"]
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
@@ -91,6 +95,20 @@ steps:
       - apply
       - "-f"
       - k8s/postgres.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Restart-Postgres
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - delete
+      - pod
+      - "-l"
+      - "app=postgres"
+      - "-n"
+      - "dfloo-profile"
+      - "--ignore-not-found"
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
