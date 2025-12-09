@@ -72,7 +72,9 @@ spec:
               type: RuntimeDefault
       volumes:
         - name: postgres-storage
-// filepath: k8s/postgres.yaml
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+filepath: k8s/postgres.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
