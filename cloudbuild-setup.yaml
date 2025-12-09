@@ -12,29 +12,11 @@ steps:
 
   - id: Create-CSI-Namespace
     name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
     args:
-      - create
-      - namespace
-      - secrets-store-csi-system
-      - --dry-run=client
-      - -o
-      - yaml
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-    allowFailure: true
-
-  - id: Apply-CSI-Namespace
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - apply
-      - -f
-      - -
-    stdin: |
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: secrets-store-csi-system
+      - "-c"
+      - |
+        kubectl create namespace secrets-store-csi-system --dry-run=client -o yaml | kubectl apply -f -
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
