@@ -29,37 +29,6 @@ steps:
       - "--region=us-west1"
       - "--project=$PROJECT_ID"
 
-  - id: Install-Secrets-Store-CSI
-    name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        if kubectl get deployment secrets-store-csi-driver -n kube-system &>/dev/null; then
-          echo "Secrets Store CSI Driver already installed"
-        else
-          echo "Installing Secrets Store CSI Driver..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/secrets-store-csi-driver/v1.4.0/deploy/rbac-secretproviderclass.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/secrets-store-csi-driver/v1.4.0/deploy/csidriver.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/secrets-store-csi-driver/v1.4.0/deploy/secrets-store.csi.x-k8s.io_secretproviderclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/secrets-store-csi-driver/v1.4.0/deploy/secrets-store.csi.x-k8s.io_secretproviderclasspodstatuses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/secrets-store-csi-driver/v1.4.0/deploy/secrets-store-csi-driver.yaml
-        fi
-
-        if kubectl get daemonset csi-secrets-store-provider-gcp -n kube-system &>/dev/null; then
-          echo "GCP Secrets Provider already installed"
-        else
-          echo "Installing GCP Secrets Store Provider..."
-          kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/secrets-store-csi-driver-provider-gcp/v1.4.3/deploy/provider-gcp-plugin.yaml
-        fi
-
-        echo "Waiting for Secrets Store CSI Driver to be ready..."
-        kubectl wait --for=condition=ready pod -l app=secrets-store-csi-driver -n kube-system --timeout=120s || true
-        kubectl wait --for=condition=ready pod -l app=csi-secrets-store-provider-gcp -n kube-system --timeout=60s || true
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
   - id: Apply-Manifests
     name: "gcr.io/cloud-builders/kubectl"
     args:

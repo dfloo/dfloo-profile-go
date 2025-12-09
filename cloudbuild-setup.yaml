@@ -1,0 +1,42 @@
+# One-time cluster setup - run manually when needed
+steps:
+  - id: Get-Credentials
+    name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - container
+      - clusters
+      - get-credentials
+      - dfloo-profile-cluster
+      - "--region=us-west1"
+      - "--project=$PROJECT_ID"
+
+  - id: Install-CSI-Driver
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        # Install helm
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sh
+
+        # Add repo
+        helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+        helm repo update
+
+        # Install CSI driver
+        helm upgrade --install csi-secrets-store \
+          secrets-store-csi-driver/secrets-store-csi-driver \
+          --namespace kube-system \
+          --set syncSecret.enabled=true \
+          --set enableSecretRotation=true
+
+        # Install GCP provider
+        kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/secrets-store-csi-driver-provider-gcp/v1.4.1/deploy/provider-gcp-plugin.yaml
+
+        # Wait for pods
+        kubectl wait --for=condition=ready pod \
+          -l app.kubernetes.io/name=secrets-store-csi-driver \
+          -n kube-system --timeout=120s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
