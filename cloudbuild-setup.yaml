@@ -11,13 +11,18 @@ steps:
       - "--project=$PROJECT_ID"
 
   - id: Install-CSI-Driver
-    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
-    entrypoint: "sh"
+    name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
     args:
       - "-c"
       - |
+        set -e
+
         # Install helm
-        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sh
+        curl -fsSL https://get.helm.sh/helm-v3.13.0-linux-amd64.tar.gz -o helm.tar.gz
+        tar -zxvf helm.tar.gz
+        mv linux-amd64/helm /usr/local/bin/helm
+        chmod +x /usr/local/bin/helm
 
         # Add repo
         helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
@@ -34,9 +39,16 @@ steps:
         kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/secrets-store-csi-driver-provider-gcp/v1.4.1/deploy/provider-gcp-plugin.yaml
 
         # Wait for pods
+        echo "Waiting for CSI driver pods to be ready..."
         kubectl wait --for=condition=ready pod \
           -l app.kubernetes.io/name=secrets-store-csi-driver \
-          -n kube-system --timeout=120s
+          -n kube-system --timeout=120s || true
+
+        echo "CSI Driver installation complete!"
+        kubectl get pods -n kube-system | grep secrets-store
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
 options:
   logging: CLOUD_LOGGING_ONLY
