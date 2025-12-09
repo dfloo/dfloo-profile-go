@@ -79,29 +79,6 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Wait-PVC
-    name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        echo "Waiting for PVC to bind..."
-        for i in {1..30}; do
-          STATUS=$$(kubectl get pvc postgres-pvc -n dfloo-profile -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-          echo "Attempt $$i: PVC status is $$STATUS"
-          if [ "$$STATUS" = "Bound" ]; then
-            echo "PVC is bound!"
-            exit 0
-          fi
-          sleep 2
-        done
-        echo "PVC did not bind in time"
-        kubectl describe pvc postgres-pvc -n dfloo-profile
-        exit 1
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
   - id: Apply-Postgres
     name: "gcr.io/cloud-builders/kubectl"
     args:
@@ -124,8 +101,11 @@ steps:
         echo "=== Checking Postgres Pods ==="
         kubectl get pods -l app=postgres -n dfloo-profile -o wide
         echo ""
+        echo "=== Checking PVC Status ==="
+        kubectl get pvc postgres-pvc -n dfloo-profile
+        echo ""
         echo "=== Checking Postgres Events ==="
-        kubectl get events -n dfloo-profile --sort-by='.lastTimestamp' | grep postgres || true
+        kubectl get events -n dfloo-profile --sort-by='.lastTimestamp' | tail -20
         echo ""
         echo "=== Pod Descriptions ==="
         kubectl describe pods -l app=postgres -n dfloo-profile || true
