@@ -49,16 +49,6 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Apply-Secret-Provider
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - apply
-      - "-f"
-      - k8s/secret-provider.yaml
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
   - id: Apply-Service-Account
     name: "gcr.io/cloud-builders/kubectl"
     args:
