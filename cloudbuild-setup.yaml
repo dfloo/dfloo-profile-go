@@ -10,6 +10,35 @@ steps:
       - "--region=us-west1"
       - "--project=$PROJECT_ID"
 
+  - id: Create-CSI-Namespace
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - create
+      - namespace
+      - secrets-store-csi-system
+      - --dry-run=client
+      - -o
+      - yaml
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+    allowFailure: true
+
+  - id: Apply-CSI-Namespace
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - -f
+      - -
+    stdin: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: secrets-store-csi-system
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
   - id: Install-CSI-Driver
     name: "gcr.io/cloud-builders/kubectl"
     entrypoint: "bash"
@@ -28,24 +57,27 @@ steps:
         helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
         helm repo update
 
-        # Install CSI driver
+        # Install CSI driver in custom namespace
         helm upgrade --install csi-secrets-store \
           secrets-store-csi-driver/secrets-store-csi-driver \
-          --namespace kube-system \
+          --namespace secrets-store-csi-system \
           --set syncSecret.enabled=true \
-          --set enableSecretRotation=true
+          --set enableSecretRotation=true \
+          --set linux.image.pullPolicy=Always
 
-        # Install GCP provider
-        kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/secrets-store-csi-driver-provider-gcp/v1.4.1/deploy/provider-gcp-plugin.yaml
+        # Install GCP provider (download and modify namespace)
+        curl -fsSL https://raw.githubusercontent.com/GoogleCloudPlatform/secrets-store-csi-driver-provider-gcp/v1.4.1/deploy/provider-gcp-plugin.yaml | \
+          sed 's/namespace: kube-system/namespace: secrets-store-csi-system/g' | \
+          kubectl apply -f -
 
         # Wait for pods
         echo "Waiting for CSI driver pods to be ready..."
         kubectl wait --for=condition=ready pod \
           -l app.kubernetes.io/name=secrets-store-csi-driver \
-          -n kube-system --timeout=120s || true
+          -n secrets-store-csi-system --timeout=120s || true
 
         echo "CSI Driver installation complete!"
-        kubectl get pods -n kube-system | grep secrets-store
+        kubectl get pods -n secrets-store-csi-system
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
