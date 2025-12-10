@@ -1,0 +1,29 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: api-certificate
+  namespace: dfloo-profile
+spec:
+  domains:
+    - api.dfloo-profile.com
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dfloo-profile-ingress
+  namespace: dfloo-profile
+  annotations:
+    networking.gke.io/managed-certificates: "api-certificate"
+spec:
+  ingressClassName: gce
+  rules:
+    - host: api.dfloo-profile.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dfloo-profile-api
+                port:
+                  number: 80
