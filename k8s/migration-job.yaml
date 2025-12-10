@@ -29,13 +29,6 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: POSTGRES_PASSWORD
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "100m"
       containers:
         - name: migrate
           image: migrate/migrate
@@ -55,25 +48,8 @@ spec:
           volumeMounts:
             - name: migrations
               mountPath: /migrations
-            - name: secrets-store
-              mountPath: "/mnt/secrets"
-              readOnly: true
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "100m"
       volumes:
         - name: migrations
           configMap:
             name: db-migrations
-        - name: secrets-store
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: app-secrets-provider
       restartPolicy: OnFailure
-  backoffLimit: 3

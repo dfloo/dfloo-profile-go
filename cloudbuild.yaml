@@ -76,12 +76,18 @@ steps:
       - "-c"
       - |
         set -e
-        set -o pipefail # Fail if kubectl create fails
+        set -o pipefail
+
+        # Fetch DB name from ConfigMap
+        DB_NAME=$(kubectl get configmap app-config -n dfloo-profile -o jsonpath='{.data.POSTGRES_DB}')
+        echo "Found database name: $DB_NAME"
+
         echo "Creating app-secrets..."
         kubectl create secret generic app-secrets \
           --namespace=dfloo-profile \
           --from-literal=POSTGRES_USER="$$POSTGRES_USER" \
           --from-literal=POSTGRES_PASSWORD="$$POSTGRES_PASSWORD" \
+          --from-literal=DATABASE_URL="postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/$DB_NAME?sslmode=disable" \
           --dry-run=client -o yaml | kubectl apply -f -
         echo "Secret created."
     secretEnv: ["POSTGRES_USER", "POSTGRES_PASSWORD"]
