@@ -33,12 +33,9 @@ spec:
         - name: migrate
           image: migrate/migrate
           command:
-            - migrate
-            - -path
-            - /migrations
-            - -database
-            - $(DATABASE_URL)
-            - up
+            - "sh"
+            - "-c"
+            - 'migrate -path /migrations -database "$(DATABASE_URL)" up'
           env:
             - name: DATABASE_URL
               valueFrom:
