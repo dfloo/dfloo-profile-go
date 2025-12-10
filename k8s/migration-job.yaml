@@ -35,11 +35,7 @@ spec:
           command:
             - "sh"
             - "-c"
-            - |
-              echo "--- DEBUG ---"
-              echo "DATABASE_URL is: [$(DATABASE_URL)]"
-              echo "--- END DEBUG ---"
-              migrate -path /migrations -database "$(DATABASE_URL)" up
+            - 'migrate -path /migrations -database "$(DATABASE_URL)" up'
           env:
             - name: DATABASE_URL
               valueFrom:
