@@ -244,6 +244,16 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
+  - id: Apply-Ingress
+    name: "gcr.io/cloud-builders/kubectl"
+    args:
+      - apply
+      - "-f"
+      - k8s/ingress.yaml
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
   - id: Update-API-Image
     name: "gcr.io/cloud-builders/kubectl"
     args:
@@ -291,12 +301,12 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Get-Service
+  - id: Get-Ingress
     name: "gcr.io/cloud-builders/kubectl"
     args:
       - get
-      - service
-      - dfloo-profile-api
+      - ingress
+      - dfloo-profile-ingress
       - "-n"
       - "dfloo-profile"
     env:
