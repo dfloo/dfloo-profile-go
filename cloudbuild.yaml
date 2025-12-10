@@ -202,15 +202,33 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Wait-Migrations
+  - id: Wait-And-Debug-Migrations
     name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
     args:
-      - wait
-      - "--for=condition=complete"
-      - "job/db-migration"
-      - "-n"
-      - "dfloo-profile"
-      - "--timeout=300s"
+      - "-c"
+      - |
+        echo "Waiting for DB Migrations to complete (300s timeout)..."
+        if ! kubectl wait --for=condition=complete job/db-migration -n dfloo-profile --timeout=300s; then
+          echo "Migrations failed to complete within timeout. Debugging..."
+          echo ""
+          echo "=== JOB STATUS ==="
+          kubectl get jobs -n dfloo-profile
+          echo ""
+          echo "=== POD STATUS ==="
+          kubectl get pods -n dfloo-profile -l job-name=db-migration
+          echo ""
+          echo "=== JOB LOGS ==="
+          kubectl logs job/db-migration -n dfloo-profile --tail=100 || echo "Unable to fetch logs"
+          echo ""
+          echo "=== JOB DESCRIBE ==="
+          kubectl describe job db-migration -n dfloo-profile
+          echo ""
+          echo "=== POD DESCRIBE ==="
+          kubectl describe pods -l job-name=db-migration -n dfloo-profile
+          exit 1
+        fi
+        echo "Migrations completed successfully"
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
