@@ -14,8 +14,8 @@ metadata:
   namespace: dfloo-profile
   annotations:
     networking.gke.io/managed-certificates: "api-certificate"
-    kubernetes.io/ingress.class: "gce"
 spec:
+  ingressClassName: gce
   rules:
     - host: api.dfloo-profile.com
       http:

@@ -108,7 +108,7 @@ steps:
       - deployment/postgres
       - "-n"
       - dfloo-profile
-      - --timeout=600s
+      - --timeout=300s
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
