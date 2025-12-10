@@ -100,68 +100,15 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Restart-Postgres
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - delete
-      - pod
-      - "-l"
-      - "app=postgres"
-      - "-n"
-      - "dfloo-profile"
-      - "--ignore-not-found"
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
-  - id: Debug-Postgres
-    name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        echo "=== Checking Postgres Deployment ==="
-        kubectl get deployment postgres -n dfloo-profile -o wide
-        echo ""
-        echo "=== Checking Postgres Pods ==="
-        kubectl get pods -l app=postgres -n dfloo-profile -o wide
-        echo ""
-        echo "=== Checking PVC Status ==="
-        kubectl get pvc postgres-pvc -n dfloo-profile
-        echo ""
-        echo "=== Checking Postgres Events ==="
-        kubectl get events -n dfloo-profile --sort-by='.lastTimestamp' | tail -20
-        echo ""
-        echo "=== Pod Descriptions ==="
-        kubectl describe pods -l app=postgres -n dfloo-profile || true
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
   - id: Wait-Postgres
     name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
     args:
-      - "-c"
-      - |
-        echo "Waiting for Postgres to be ready (600s timeout)..."
-        if ! kubectl wait --for=condition=available deployment/postgres -n dfloo-profile --timeout=600s; then
-          echo "Postgres failed to become ready within timeout. Debugging..."
-          echo ""
-          echo "=== POD STATUS ==="
-          kubectl get pods -n dfloo-profile -l app=postgres
-          echo ""
-          echo "=== EVENTS (Last 50) ==="
-          kubectl get events -n dfloo-profile --sort-by='.lastTimestamp' | tail -50
-          echo ""
-          echo "=== POD LOGS ==="
-          kubectl logs -l app=postgres -n dfloo-profile --tail=100 --all-containers=true
-          echo ""
-          echo "=== POD DESCRIBE ==="
-          kubectl describe pod -l app=postgres -n dfloo-profile
-          exit 1 # Fail the build
-        fi
-        echo "Postgres is ready."
+      - wait
+      - --for=condition=available
+      - deployment/postgres
+      - "-n"
+      - dfloo-profile
+      - --timeout=600s
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
@@ -203,33 +150,15 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Wait-And-Debug-Migrations
+  - id: Wait-Migrations
     name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
     args:
-      - "-c"
-      - |
-        echo "Waiting for DB Migrations to complete (300s timeout)..."
-        if ! kubectl wait --for=condition=complete job/db-migration -n dfloo-profile --timeout=300s; then
-          echo "Migrations failed to complete within timeout. Debugging..."
-          echo ""
-          echo "=== JOB STATUS ==="
-          kubectl get jobs -n dfloo-profile
-          echo ""
-          echo "=== POD STATUS ==="
-          kubectl get pods -n dfloo-profile -l job-name=db-migration
-          echo ""
-          echo "=== JOB LOGS ==="
-          kubectl logs job/db-migration -n dfloo-profile --tail=100 || echo "Unable to fetch logs"
-          echo ""
-          echo "=== JOB DESCRIBE ==="
-          kubectl describe job db-migration -n dfloo-profile
-          echo ""
-          echo "=== POD DESCRIBE ==="
-          kubectl describe pods -l job-name=db-migration -n dfloo-profile
-          exit 1
-        fi
-        echo "Migrations completed successfully"
+      - wait
+      - --for=condition=complete
+      - job/db-migration
+      - "-n"
+      - dfloo-profile
+      - --timeout=300s
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
@@ -267,36 +196,15 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Wait-And-Debug-API
+  - id: Wait-API-Rollout
     name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
     args:
-      - "-c"
-      - |
-        echo "Waiting for API deployment to complete (300s timeout)..."
-        if ! kubectl rollout status deployment/dfloo-profile-api -n dfloo-profile --timeout=300s; then
-          echo "API rollout failed to complete within timeout. Debugging..."
-          echo ""
-          echo "=== DEPLOYMENT STATUS ==="
-          kubectl get deployment dfloo-profile-api -n dfloo-profile -o yaml
-          echo ""
-          echo "=== POD STATUS ==="
-          kubectl get pods -n dfloo-profile -l app=dfloo-profile-api
-          echo ""
-          echo "=== PODS DESCRIBE ==="
-          kubectl describe pods -n dfloo-profile -l app=dfloo-profile-api
-          echo ""
-          echo "=== LOGS FROM OLD POD (if available) ==="
-          # Try to get logs from the terminating pod
-          TERMINATING_POD=$(kubectl get pods -n dfloo-profile -l app=dfloo-profile-api --field-selector=status.phase=Terminating -o jsonpath='{.items[0].metadata.name}' || echo "")
-          if [ -n "$$TERMINATING_POD" ]; then
-            kubectl logs $$TERMINATING_POD -n dfloo-profile --tail=100 || echo "Could not retrieve logs from terminating pod."
-          else
-            echo "No terminating pod found."
-          fi
-          exit 1
-        fi
-        echo "API rollout completed successfully."
+      - rollout
+      - status
+      - deployment/dfloo-profile-api
+      - "-n"
+      - dfloo-profile
+      - --timeout=300s
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
