@@ -1,0 +1,10 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: api-backend-config
+  namespace: dfloo-profile
+spec:
+  healthCheck:
+    type: HTTP
+    requestPath: /health
+    port: 8080
