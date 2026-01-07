@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: dfloo-profile-api
   namespace: dfloo-profile
+  annotations:
+    cloud.google.com/backend-config: '{"default": "api-backend-config"}'
 spec:
   selector:
     app: dfloo-profile-api
