@@ -11,7 +11,7 @@ services:
       AUTH0_DOMAIN: ${AUTH0_DOMAIN}
       CLIENT_ORIGIN: ${CLIENT_ORIGIN}
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
     networks:
      - dfloo-network
@@ -40,7 +40,7 @@ services:
   migrate:
     image: migrate/migrate
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
     networks:
      - dfloo-network
