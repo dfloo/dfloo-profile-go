@@ -45,7 +45,7 @@ var (
 func InitPool(ctx context.Context) error {
 	var err error
 	once.Do(func() {
-		Pool, err = pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+		Pool, err = pgxpool.New(ctx, "")
 	})
 	return err
 }
