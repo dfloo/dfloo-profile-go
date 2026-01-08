@@ -37,17 +37,21 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: POSTGRES_DB
+            - name: PGHOST
+              value: "127.0.0.1"
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
                   key: POSTGRES_DB
-            - name: POSTGRES_USER
+            - name: PGUSER
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
                   key: POSTGRES_USER
-            - name: POSTGRES_PASSWORD
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
@@ -97,6 +101,7 @@ spec:
             - "-instances=$(SQL_INSTANCE_CONNECTION_NAME)=tcp:5432"
           securityContext:
             runAsNonRoot: true
+            runAsUser: 65532
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -111,5 +116,5 @@ spec:
               memory: "256Mi"
               cpu: "100m"
             limits:
-              memory: "512Mi"
-              cpu: "250m"
+              memory: "256Mi"
+              cpu: "100m"

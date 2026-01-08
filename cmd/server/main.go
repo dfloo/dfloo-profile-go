@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -46,12 +45,7 @@ var (
 func InitPool(ctx context.Context) error {
 	var err error
 	once.Do(func() {
-		connStr := fmt.Sprintf("postgres://%s:%s@127.0.0.1:5432/%s?sslmode=disable",
-			os.Getenv("POSTGRES_USER"),
-			os.Getenv("POSTGRES_PASSWORD"),
-			os.Getenv("POSTGRES_DB"),
-		)
-		Pool, err = pgxpool.New(ctx, connStr)
+		Pool, err = pgxpool.New(ctx, "")
 	})
 	return err
 }
