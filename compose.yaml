@@ -49,14 +49,10 @@ services:
     networks:
      - dfloo-network
     environment:
-      PGHOST: postgres
-      PGPORT: 5432
-      PGUSER: ${POSTGRES_USER}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      PGDATABASE: ${POSTGRES_DB}
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
     volumes:
      - ./db/migrations:/migrations
-    entrypoint: [ "migrate", "-path", "/migrations", "-database", "postgres://?sslmode=disable", "up" ]
+    entrypoint: [ "sh", "-c", "migrate -path /migrations -database \"$$DATABASE_URL\" up" ]
 
 networks:
   dfloo-network:
