@@ -6,7 +6,7 @@ metadata:
 spec:
   template:
     spec:
-      serviceAccountName: dfloo-profile-ksa
+      serviceAccountName: dfloo-profile-sa
       containers:
         - name: migrate
           image: migrate/migrate
@@ -53,8 +53,9 @@ spec:
         - name: cloud-sql-proxy
           image: gcr.io/cloudsql-docker/gce-proxy:1.33.9
           command:
-            - "/cloud_sql_proxy"
-            - "-instances=$(SQL_INSTANCE_CONNECTION_NAME)=tcp:5432"
+            - "sh"
+            - "-c"
+            - "/cloud_sql_proxy -instances=${SQL_INSTANCE_CONNECTION_NAME}=tcp:5432"
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
