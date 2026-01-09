@@ -29,7 +29,7 @@ spec:
       labels:
         app: dfloo-profile-api
     spec:
-      serviceAccountName: dfloo-profile-sa
+      serviceAccountName: dfloo-profile-ksa
       containers:
         - name: api
           image: gcr.io/dfloo-profile/dfloo-profile-go:latest
