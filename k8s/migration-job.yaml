@@ -50,6 +50,9 @@ spec:
           volumeMounts:
             - name: migrations
               mountPath: /migrations
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
         - name: cloud-sql-proxy
           image: gcr.io/cloudsql-docker/gce-proxy:1.33.9
           command:
@@ -79,4 +82,10 @@ spec:
         - name: migrations
           configMap:
             name: db-migrations
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "app-secrets-provider"
       restartPolicy: OnFailure
