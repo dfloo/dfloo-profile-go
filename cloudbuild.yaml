@@ -114,7 +114,7 @@ steps:
       - job/db-migration
       - "-n"
       - dfloo-profile
-      - --timeout=300s
+      - --timeout=600s
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
