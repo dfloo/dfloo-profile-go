@@ -9,6 +9,10 @@ spec:
   template:
     spec:
       serviceAccountName: dfloo-profile-ksa
+      tolerations:
+        - key: "secrets-store.csi.k8s.io/not-ready"
+          operator: "Exists"
+          effect: "NoSchedule"
       containers:
         - name: migrate
           image: migrate/migrate
