@@ -106,25 +106,16 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
-  - id: Wait-Migrations
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - wait
-      - --for=condition=complete
-      - job/db-migration
-      - "-n"
-      - dfloo-profile
-      - --timeout=300s
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
-  - id: Debug-Migrations-On-Failure
+  - id: Wait-And-Debug-Migrations
     name: "gcr.io/cloud-builders/kubectl"
     entrypoint: "bash"
     args:
       - "-c"
       - |
+        echo "Waiting for migration job to complete..."
+        kubectl wait --for=condition=complete job/db-migration -n dfloo-profile --timeout=300s
+
+        # Check the exit code of the kubectl wait command
         if [[ "$?" -ne 0 ]]; then
           echo "Migration job failed to complete. Debugging..."
           
@@ -132,7 +123,7 @@ steps:
           kubectl describe job db-migration -n dfloo-profile
           
           echo "--- Getting migration pods ---"
-          POD_NAME=$(kubectl get pods -n dfloo-profile -l job-name=db-migration -o jsonpath='{.items[0].metadata.name}')
+          POD_NAME=$$(kubectl get pods -n dfloo-profile -l job-name=db-migration -o jsonpath='{.items[0].metadata.name}')
           if [[ -n "$$POD_NAME" ]]; then
             echo "Pod name is: $$POD_NAME"
             
@@ -148,6 +139,8 @@ steps:
             echo "Could not find a pod for the migration job."
           fi
           exit 1
+        else
+          echo "Migration job completed successfully."
         fi
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
