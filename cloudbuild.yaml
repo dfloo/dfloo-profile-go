@@ -133,17 +133,17 @@ steps:
           
           echo "--- Getting migration pods ---"
           POD_NAME=$(kubectl get pods -n dfloo-profile -l job-name=db-migration -o jsonpath='{.items[0].metadata.name}')
-          if [[ -n "$POD_NAME" ]]; then
-            echo "Pod name is: $POD_NAME"
+          if [[ -n "$$POD_NAME" ]]; then
+            echo "Pod name is: $$POD_NAME"
             
             echo "--- Describing migration pod ---"
-            kubectl describe pod $POD_NAME -n dfloo-profile
+            kubectl describe pod $$POD_NAME -n dfloo-profile
             
             echo "--- Logs for migrate container ---"
-            kubectl logs $POD_NAME -n dfloo-profile -c migrate --tail=100
+            kubectl logs $$POD_NAME -n dfloo-profile -c migrate --tail=100
             
             echo "--- Logs for cloud-sql-proxy container ---"
-            kubectl logs $POD_NAME -n dfloo-profile -c cloud-sql-proxy --tail=100
+            kubectl logs $$POD_NAME -n dfloo-profile -c cloud-sql-proxy --tail=100
           else
             echo "Could not find a pod for the migration job."
           fi
