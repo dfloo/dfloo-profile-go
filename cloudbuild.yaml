@@ -114,7 +114,41 @@ steps:
       - job/db-migration
       - "-n"
       - dfloo-profile
-      - --timeout=600s
+      - --timeout=300s
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Debug-Migrations-On-Failure
+    name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        if [[ "$?" -ne 0 ]]; then
+          echo "Migration job failed to complete. Debugging..."
+          
+          echo "--- Describing migration job ---"
+          kubectl describe job db-migration -n dfloo-profile
+          
+          echo "--- Getting migration pods ---"
+          POD_NAME=$(kubectl get pods -n dfloo-profile -l job-name=db-migration -o jsonpath='{.items[0].metadata.name}')
+          if [[ -n "$POD_NAME" ]]; then
+            echo "Pod name is: $POD_NAME"
+            
+            echo "--- Describing migration pod ---"
+            kubectl describe pod $POD_NAME -n dfloo-profile
+            
+            echo "--- Logs for migrate container ---"
+            kubectl logs $POD_NAME -n dfloo-profile -c migrate --tail=100
+            
+            echo "--- Logs for cloud-sql-proxy container ---"
+            kubectl logs $POD_NAME -n dfloo-profile -c cloud-sql-proxy --tail=100
+          else
+            echo "Could not find a pod for the migration job."
+          fi
+          exit 1
+        fi
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
