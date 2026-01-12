@@ -4,26 +4,11 @@ metadata:
   name: db-migration
   namespace: dfloo-profile
 spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 300
   template:
     spec:
       serviceAccountName: dfloo-profile-ksa
-      initContainers:
-        - name: wait-for-csi-driver
-          image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-          command:
-            - "sh"
-            - "-c"
-            - |
-              echo "Waiting for secrets-store.csi.k8s.io driver to be ready..."
-              while [ ! -e /var/lib/kubelet/plugins/secrets-store.csi.k8s.io/csi.sock ]; do
-                echo "CSI driver socket not found, sleeping..."
-                sleep 2
-              done
-              echo "CSI driver ready."
-          volumeMounts:
-            - name: kubelet-plugins
-              mountPath: /var/lib/kubelet/plugins
-              readOnly: true
       containers:
         - name: migrate
           image: migrate/migrate
@@ -96,10 +81,6 @@ spec:
               memory: "256Mi"
               cpu: "100m"
       volumes:
-        - name: kubelet-plugins
-          hostPath:
-            path: /var/lib/kubelet/plugins
-            type: Directory
         - name: migrations
           configMap:
             name: db-migrations
