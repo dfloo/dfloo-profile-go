@@ -54,9 +54,10 @@ spec:
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.10.0
           command:
-            - "sh"
-            - "-c"
-            - 'exec /cloud-sql-proxy --port 5432 "$(cat /mnt/secrets-store/sql-instance-connection-name)"'
+            - "/cloud-sql-proxy"
+            - "--port=5432"
+            - "--unix-socket=/cloudsql"
+            - "$(cat /mnt/secrets-store/sql-instance-connection-name)"
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
