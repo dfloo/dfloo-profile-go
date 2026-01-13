@@ -5,16 +5,13 @@ metadata:
   namespace: dfloo-profile
 spec:
   backoffLimit: 4
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: 600
   ttlSecondsAfterFinished: 600
   template:
     spec:
       automountServiceAccountToken: true
       serviceAccountName: dfloo-profile-ksa
       tolerations:
-        - key: "secrets-store.csi.k8s.io/not-ready"
-          operator: "Exists"
-          effect: "NoSchedule"
         - key: "node.gke.io/balloon-pod-resize"
           operator: "Exists"
           effect: "NoSchedule"
@@ -25,6 +22,9 @@ spec:
             - "sh"
             - "-c"
             - |
+              export PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
+              export PGUSER="$(cat /mnt/secrets-store/postgres-user)"
+              export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
               until nc -z -w 2 127.0.0.1 5432; do
                 echo "Waiting for cloud-sql-proxy...";
                 sleep 1;
@@ -36,21 +36,6 @@ spec:
               value: "127.0.0.1"
             - name: PGPORT
               value: "5432"
-            - name: PGDATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: POSTGRES_DB
-            - name: PGUSER
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: POSTGRES_USER
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: POSTGRES_PASSWORD
           resources:
             requests:
               memory: "128Mi"
@@ -67,8 +52,9 @@ spec:
         - name: cloud-sql-proxy
           image: gcr.io/cloudsql-docker/gce-proxy:1.33.9
           command:
-            - "/cloud_sql_proxy"
-            - "-instances=${SQL_INSTANCE_CONNECTION_NAME}=tcp:5432"
+            - "sh"
+            - "-c"
+            - "exec /cloud_sql_proxy -instances=$(cat /mnt/secrets-store/sql-instance-connection-name)=tcp:5432"
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
@@ -81,8 +67,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: app-config
-            - secretRef:
-                name: app-secrets
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
           resources:
             requests:
               memory: "128Mi"
