@@ -14,6 +14,9 @@ spec:
         - key: "secrets-store.csi.k8s.io/not-ready"
           operator: "Exists"
           effect: "NoSchedule"
+        - key: "node.gke.io/balloon-pod-resize"
+          operator: "Exists"
+          effect: "NoSchedule"
       containers:
         - name: migrate
           image: migrate/migrate
@@ -81,10 +84,10 @@ spec:
                 name: app-secrets
           resources:
             requests:
-              memory: "256Mi"
+              memory: "128Mi"
               cpu: "100m"
             limits:
-              memory: "256Mi"
+              memory: "128Mi"
               cpu: "100m"
       volumes:
         - name: migrations
@@ -92,7 +95,7 @@ spec:
             name: db-migrations
         - name: secrets-store-inline
           csi:
-            driver: secrets-store.csi.k8s.io
+            driver: secrets-store-gke.csi.k8s.io
             readOnly: true
             volumeAttributes:
               secretProviderClass: "app-secrets-provider"

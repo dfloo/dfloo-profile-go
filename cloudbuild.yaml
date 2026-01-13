@@ -133,7 +133,7 @@ steps:
           kubectl get events -n dfloo-profile --sort-by='.metadata.creationTimestamp' | tail -n 200 || true
 
           echo "--- Looking for pods with label job-name=db-migration ---"
-          PODS=$$(kubectl get pods -n dfloo-profile -l job-name=db-migration -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}')
+          PODS=$$(kubectl get pods -n dfloo-profile -l job-name=db-migration -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' 2>/dev/null || true)
           if [[ -n "$$PODS" ]]; then
             for P in $$PODS; do
               echo "---- Found pod: $$P ----"
@@ -152,9 +152,40 @@ steps:
               kubectl logs $$P -n dfloo-profile -c cloud-sql-proxy --previous --tail=200 || true
             done
           else
-            echo "No pods found for the job. Listing recent pods and events in namespace:"
+            echo "No pods found for the job. Gathering cluster-level debug info..."
+
+            echo "--- Recent pods in namespace ---"
             kubectl get pods -n dfloo-profile -o wide --sort-by='.metadata.creationTimestamp' | tail -n 50 || true
+
+            echo "--- Events in namespace ---"
             kubectl get events -n dfloo-profile --sort-by='.metadata.creationTimestamp' | tail -n 200 || true
+
+            echo "--- Nodes (capacity/allocatable) ---"
+            kubectl get nodes -o wide || true
+            kubectl describe nodes | sed -n '1,200p' || true
+
+            echo "--- Node resource usage (if metrics-server available) ---"
+            kubectl top nodes || true
+
+            echo "--- CSI drivers ---"
+            kubectl get csidrivers || true
+            kubectl get csidrivers -o yaml || true
+
+            echo "--- Check secrets-store CSI driver pods in kube-system ---"
+            kubectl get pods -n kube-system -o wide | grep -E "secrets-store|secret-store|csi" || true
+            kubectl get daemonset -n kube-system -o wide | grep -E "secrets-store|secret-store|csi" || true
+
+            echo "--- Nodes referenced by recent 'Successfully assigned' events for db-migration ---"
+            NODES=$$(kubectl get events -n dfloo-profile --sort-by='.metadata.creationTimestamp' | grep 'Successfully assigned' | grep db-migration || true | awk -F'to ' '{print $$2}' | awk '{print $$1}' | sort -u)
+            if [[ -n "$$NODES" ]]; then
+              for N in $$NODES; do
+                echo "---- Describe node: $$N ----"
+                kubectl describe node $$N || true
+              done
+            fi
+
+            echo "--- Filter events for FailedMount / FailedScheduling / DeadlineExceeded ---"
+            kubectl get events -n dfloo-profile --sort-by='.metadata.creationTimestamp' | egrep "FailedMount|FailedScheduling|DeadlineExceeded" || true
           fi
 
           exit 1
