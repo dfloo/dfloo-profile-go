@@ -52,7 +52,7 @@ spec:
               mountPath: "/mnt/secrets-store"
               readOnly: true
         - name: cloud-sql-proxy
-          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.10.0
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:alpine
           command:
             - "sh"
             - "-c"
