@@ -22,13 +22,15 @@ spec:
             - "sh"
             - "-c"
             - |
-              export PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
-              export PGUSER="$(cat /mnt/secrets-store/postgres-user)"
               export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
+              PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
+              PGUSER="$(cat /mnt/secrets-store/postgres-user)"
               SQL_INSTANCE_CONNECTION_NAME="$(cat /mnt/secrets-store/sql-instance-connection-name)"
-              DSN="postgres://${PGUSER}:${PGPASSWORD}@${SQL_INSTANCE_CONNECTION_NAME}/${PGDATABASE}?host=/cloudsql"
+              DSN="postgres://${PGUSER}@localhost:5432/${PGDATABASE}?host=/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}&sslmode=disable"
+
               echo "Running migrations..."
               for i in $(seq 1 60); do
+                # The migrate command will automatically use PGPASSWORD
                 migrate -path /migrations -database "${DSN}" up && exit 0
                 echo "Retry $i: database not reachable yet"
                 sleep 5
