@@ -30,8 +30,7 @@ spec:
 
               echo "Running migrations..."
               for i in $(seq 1 60); do
-                # The migrate command will automatically use PGPASSWORD
-                migrate -path /migrations -database "${DSN}" up && exit 0
+                migrate -path /migrations -database "${DSN}" up && touch /cloudsql/done && exit 0
                 echo "Retry $i: database not reachable yet"
                 sleep 5
               done
@@ -59,7 +58,12 @@ spec:
             - |
               /cloud-sql-proxy \
                 --unix-socket=/cloudsql \
-                "$(cat /mnt/secrets-store/sql-instance-connection-name)"
+                "$(cat /mnt/secrets-store/sql-instance-connection-name)" &
+
+              while [ ! -f /cloudsql/done ]; do
+                sleep 1
+              done
+              echo "Migration complete, shutting down proxy."
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
