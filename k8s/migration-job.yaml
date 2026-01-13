@@ -9,6 +9,7 @@ spec:
   ttlSecondsAfterFinished: 600
   template:
     spec:
+      automountServiceAccountToken: true
       serviceAccountName: dfloo-profile-ksa
       tolerations:
         - key: "secrets-store.csi.k8s.io/not-ready"
