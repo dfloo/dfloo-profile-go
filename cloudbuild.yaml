@@ -26,8 +26,8 @@ steps:
       - clusters
       - get-credentials
       - dfloo-profile-cluster
-      - "--region=us-west1"
-      - "--project=$PROJECT_ID"
+      - --region=us-west1
+      - --project=${PROJECT_ID}
 
   - id: Apply-Manifests
     name: "gcr.io/cloud-builders/kubectl"
@@ -68,15 +68,6 @@ steps:
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
-  - id: Wait-For-Secret-Creation
-    name: "gcr.io/cloud-builders/gcloud"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        echo "Waiting 15 seconds for the Secret Store CSI driver to create the secret..."
-        sleep 15
 
   - id: Apply-Migrations-ConfigMap
     name: "gcr.io/cloud-builders/kubectl"

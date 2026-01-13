@@ -25,12 +25,14 @@ spec:
               export PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
               export PGUSER="$(cat /mnt/secrets-store/postgres-user)"
               export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
-              until nc -z -w 2 127.0.0.1 5432; do
-                echo "Waiting for cloud-sql-proxy...";
-                sleep 1;
-              done;
-              echo "cloud-sql-proxy is ready. Running migrations."
-              migrate -path /migrations -database "postgres://?sslmode=disable" up
+              DSN="host=127.0.0.1 port=5432 dbname=${PGDATABASE} user=${PGUSER} password=${PGPASSWORD} sslmode=disable"
+              echo "Running migrations..."
+              for i in $(seq 1 60); do
+                migrate -path /migrations -database "${DSN}" up && exit 0
+                echo "Retry $i: database not reachable yet"
+                sleep 5
+              done
+              echo "Migrations failed after retries"; exit 1
           env:
             - name: PGHOST
               value: "127.0.0.1"
@@ -50,11 +52,11 @@ spec:
               mountPath: "/mnt/secrets-store"
               readOnly: true
         - name: cloud-sql-proxy
-          image: gcr.io/cloudsql-docker/gce-proxy:1.33.9
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.10.0
           command:
             - "sh"
             - "-c"
-            - "exec /cloud_sql_proxy -instances=$(cat /mnt/secrets-store/sql-instance-connection-name)=tcp:5432"
+            - 'exec /cloud-sql-proxy --port 5432 "$(cat /mnt/secrets-store/sql-instance-connection-name)"'
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
