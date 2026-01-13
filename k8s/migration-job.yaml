@@ -26,7 +26,7 @@ spec:
               PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
               PGUSER="$(cat /mnt/secrets-store/postgres-user)"
               SQL_INSTANCE_CONNECTION_NAME="$(cat /mnt/secrets-store/sql-instance-connection-name)"
-              DSN="postgres://${PGUSER}@localhost:5432/${PGDATABASE}?host=/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}&sslmode=disable"
+              DSN="postgres://${PGUSER}@/${PGDATABASE}?host=/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}&sslmode=disable"
 
               echo "Running migrations..."
               for i in $(seq 1 60); do
@@ -36,11 +36,6 @@ spec:
                 sleep 5
               done
               echo "Migrations failed after retries"; exit 1
-          env:
-            - name: PGHOST
-              value: "127.0.0.1"
-            - name: PGPORT
-              value: "5432"
           resources:
             requests:
               memory: "128Mi"
