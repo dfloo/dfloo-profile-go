@@ -25,7 +25,7 @@ spec:
               export PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
               export PGUSER="$(cat /mnt/secrets-store/postgres-user)"
               export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
-              DSN="host=127.0.0.1 port=5432 dbname=${PGDATABASE} user=${PGUSER} password=${PGPASSWORD} sslmode=disable"
+              DSN="postgres://${PGUSER}:${PGPASSWORD}@localhost/${PGDATABASE}?host=/cloudsql/$(cat /mnt/secrets-store/sql-instance-connection-name)"
               echo "Running migrations..."
               for i in $(seq 1 60); do
                 migrate -path /migrations -database "${DSN}" up && exit 0
@@ -51,6 +51,8 @@ spec:
             - name: secrets-store-inline
               mountPath: "/mnt/secrets-store"
               readOnly: true
+            - name: cloudsql-socket
+              mountPath: /cloudsql
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:buster
           command:
@@ -58,7 +60,6 @@ spec:
             - "-c"
             - |
               /cloud-sql-proxy \
-                --port=5432 \
                 --unix-socket=/cloudsql \
                 "$(cat /mnt/secrets-store/sql-instance-connection-name)"
           securityContext:
@@ -76,6 +77,8 @@ spec:
             - name: secrets-store-inline
               mountPath: "/mnt/secrets-store"
               readOnly: true
+            - name: cloudsql-socket
+              mountPath: /cloudsql
           resources:
             requests:
               memory: "128Mi"
@@ -87,6 +90,8 @@ spec:
         - name: migrations
           configMap:
             name: db-migrations
+        - name: cloudsql-socket
+          emptyDir: {}
         - name: secrets-store-inline
           csi:
             driver: secrets-store-gke.csi.k8s.io
