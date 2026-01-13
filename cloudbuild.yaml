@@ -83,6 +83,30 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
+  - id: Wait-For-CSI-Driver
+    name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Waiting for Secrets Store CSI driver to be ready on all nodes..."
+        for i in $(seq 1 30); do
+          DESIRED=$$(kubectl get daemonset csi-secrets-store-gke -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
+          READY=$$(kubectl get daemonset csi-secrets-store-gke -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null)
+
+          if [[ -n "$$DESIRED" && -n "$$READY" && "$$DESIRED" -eq "$$READY" && "$$DESIRED" -gt 0 ]]; then
+            echo "CSI driver is ready on $$READY/$$DESIRED nodes."
+            exit 0
+          fi
+          echo "CSI driver not ready yet ($$READY/$$DESIRED)... waiting 10s."
+          sleep 10
+        done
+        echo "Error: Timed out waiting for CSI driver to become ready."
+        exit 1
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
   - id: Delete-Old-Migration-Job
     name: "gcr.io/cloud-builders/kubectl"
     args:
