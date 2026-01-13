@@ -133,6 +133,7 @@ steps:
   - id: Wait-And-Debug-Migrations
     name: "gcr.io/cloud-builders/kubectl"
     entrypoint: "bash"
+    timeout: 400s
     args:
       - "-c"
       - |
