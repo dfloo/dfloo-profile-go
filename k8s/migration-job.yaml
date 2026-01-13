@@ -52,7 +52,7 @@ spec:
               mountPath: "/mnt/secrets-store"
               readOnly: true
         - name: cloud-sql-proxy
-          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:alpine
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.10.0-debian
           command:
             - "sh"
             - "-c"
@@ -63,7 +63,6 @@ spec:
                 "$(cat /mnt/secrets-store/sql-instance-connection-name)"
           securityContext:
             runAsNonRoot: true
-            runAsUser: 65532
             allowPrivilegeEscalation: false
             capabilities:
               drop:
