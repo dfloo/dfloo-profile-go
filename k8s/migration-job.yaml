@@ -4,9 +4,17 @@ metadata:
   name: db-migration
   namespace: dfloo-profile
 spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 600
   template:
     spec:
+      automountServiceAccountToken: true
       serviceAccountName: dfloo-profile-ksa
+      tolerations:
+        - key: "node.gke.io/balloon-pod-resize"
+          operator: "Exists"
+          effect: "NoSchedule"
       containers:
         - name: migrate
           image: migrate/migrate
@@ -14,35 +22,19 @@ spec:
             - "sh"
             - "-c"
             - |
-              until nc -z -w 2 127.0.0.1 5432; do
-                echo "Waiting for cloud-sql-proxy...";
-                sleep 1;
-              done;
-              echo "cloud-sql-proxy is ready. Running migrations."
-              migrate -path /migrations -database "postgres://?sslmode=disable" up
+              export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
+              PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
+              PGUSER="$(cat /mnt/secrets-store/postgres-user)"
+              SQL_INSTANCE_CONNECTION_NAME="$(cat /mnt/secrets-store/sql-instance-connection-name)"
+              DSN="postgres://${PGUSER}@/${PGDATABASE}?host=/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}&sslmode=disable"
 
-              echo "Migration complete. Shutting down cloud-sql-proxy."
-              curl -X POST http://127.0.0.1:9091/quitquitquit
-          env:
-            - name: PGHOST
-              value: "127.0.0.1"
-            - name: PGPORT
-              value: "5432"
-            - name: PGDATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: POSTGRES_DB
-            - name: PGUSER
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: POSTGRES_USER
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: POSTGRES_PASSWORD
+              echo "Running migrations..."
+              for i in $(seq 1 60); do
+                migrate -path /migrations -database "${DSN}" up && touch /cloudsql/done && exit 0
+                echo "Retry $i: database not reachable yet"
+                sleep 5
+              done
+              echo "Migrations failed after retries"; exit 1
           resources:
             requests:
               memory: "128Mi"
@@ -53,15 +45,27 @@ spec:
           volumeMounts:
             - name: migrations
               mountPath: /migrations
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: cloudsql-socket
+              mountPath: /cloudsql
         - name: cloud-sql-proxy
-          image: gcr.io/cloudsql-docker/gce-proxy:1.33.9
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:buster
           command:
-            - "/cloud_sql_proxy"
-            - "-instances=$(SQL_INSTANCE_CONNECTION_NAME)=tcp:5432"
-            - "--http-port=9091"
+            - "sh"
+            - "-c"
+            - |
+              /cloud-sql-proxy \
+                --unix-socket=/cloudsql \
+                "$(cat /mnt/secrets-store/sql-instance-connection-name)" &
+
+              while [ ! -f /cloudsql/done ]; do
+                sleep 1
+              done
+              echo "Migration complete, shutting down proxy."
           securityContext:
             runAsNonRoot: true
-            runAsUser: 65532
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -69,17 +73,31 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           envFrom:
-            - secretRef:
-                name: app-secrets
+            - configMapRef:
+                name: app-config
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: cloudsql-socket
+              mountPath: /cloudsql
           resources:
             requests:
-              memory: "256Mi"
+              memory: "128Mi"
               cpu: "100m"
             limits:
-              memory: "256Mi"
+              memory: "128Mi"
               cpu: "100m"
       volumes:
         - name: migrations
           configMap:
             name: db-migrations
+        - name: cloudsql-socket
+          emptyDir: {}
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "app-secrets-provider"
       restartPolicy: OnFailure

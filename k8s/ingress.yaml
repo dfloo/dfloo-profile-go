@@ -16,6 +16,11 @@ metadata:
     networking.gke.io/managed-certificates: "api-certificate"
 spec:
   ingressClassName: gce
+  defaultBackend:
+    service:
+      name: dfloo-profile-api
+      port:
+        number: 80
   rules:
     - host: api.dfloo-profile.com
       http:
