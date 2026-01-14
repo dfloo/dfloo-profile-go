@@ -42,9 +42,6 @@ spec:
               value: "127.0.0.1"
             - name: PGPORT
               value: "5432"
-            - name: PGDATABASE
-            - name: PGUSER
-            - name: PGPASSWORD
             - name: AUTH0_AUDIENCE
               valueFrom:
                 configMapKeyRef:
