@@ -51,7 +51,7 @@ spec:
             - name: cloudsql-socket
               mountPath: /cloudsql
         - name: cloud-sql-proxy
-          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.20.0-buster
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:buster
           command:
             - "sh"
             - "-c"
