@@ -5,6 +5,7 @@ metadata:
   namespace: dfloo-profile
   annotations:
     cloud.google.com/backend-config: '{"default": "api-backend-config"}'
+    cloud.google.com/neg: '{"ingress": true}'
 spec:
   selector:
     app: dfloo-profile-api
