@@ -63,6 +63,15 @@ func (h *JobApplicationHandler) PostJobApplication(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if jobApplication.ResumeID != "" {
+		decodedResumeID, err := h.DecodeID(jobApplication.ResumeID)
+		if err != nil {
+			http.Error(w, "Failed to decode resumeID", http.StatusInternalServerError)
+			return
+		}
+		jobApplication.ResumeID = decodedResumeID
+	}
+
 	err := h.Repo.CreateJobApplication(r.Context(), &jobApplication, userID)
 	if err != nil {
 		http.Error(w, "Failed to create Job Application", http.StatusInternalServerError)
