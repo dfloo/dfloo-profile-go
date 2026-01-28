@@ -1,3 +1,7 @@
+substitutions:
+  _CLUSTER_NAME: dfloo-profile-cluster
+  _REGION: us-west1
+
 steps:
   - id: Build
     name: gcr.io/cloud-builders/docker
@@ -25,8 +29,8 @@ steps:
       - container
       - clusters
       - get-credentials
-      - dfloo-profile-cluster
-      - --region=us-west1
+      - ${_CLUSTER_NAME}
+      - --region=${_REGION}
       - --project=${PROJECT_ID}
 
   - id: Apply-Manifests
@@ -36,8 +40,8 @@ steps:
       - "-f"
       - k8s/namespace.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-ConfigMap
     name: "gcr.io/cloud-builders/kubectl"
@@ -46,8 +50,8 @@ steps:
       - "-f"
       - k8s/configmap.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-Service-Account
     name: "gcr.io/cloud-builders/kubectl"
@@ -56,8 +60,8 @@ steps:
       - "-f"
       - k8s/service-account.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-Secret-Provider
     name: "gcr.io/cloud-builders/kubectl"
@@ -66,8 +70,8 @@ steps:
       - "-f"
       - k8s/secret-provider.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-Migrations-ConfigMap
     name: "gcr.io/cloud-builders/kubectl"
@@ -80,32 +84,8 @@ steps:
           --namespace=dfloo-profile \
           --dry-run=client -o yaml | kubectl apply -f -
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
-
-  - id: Wait-For-CSI-Driver
-    name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        echo "Waiting for Secrets Store CSI driver to be ready on all nodes..."
-        for i in $(seq 1 30); do
-          DESIRED=$$(kubectl get daemonset csi-secrets-store-gke -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
-          READY=$$(kubectl get daemonset csi-secrets-store-gke -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null)
-
-          if [[ -n "$$DESIRED" && -n "$$READY" && "$$DESIRED" -eq "$$READY" && "$$DESIRED" -gt 0 ]]; then
-            echo "CSI driver is ready on $$READY/$$DESIRED nodes."
-            exit 0
-          fi
-          echo "CSI driver not ready yet ($$READY/$$DESIRED)... waiting 10s."
-          sleep 10
-        done
-        echo "Error: Timed out waiting for CSI driver to become ready."
-        exit 1
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Delete-Old-Migration-Job
     name: "gcr.io/cloud-builders/kubectl"
@@ -117,8 +97,8 @@ steps:
       - "dfloo-profile"
       - "--ignore-not-found"
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Run-Migrations
     name: "gcr.io/cloud-builders/kubectl"
@@ -127,8 +107,8 @@ steps:
       - "-f"
       - k8s/migration-job.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Wait-Migrations
     name: "gcr.io/cloud-builders/kubectl"
@@ -140,8 +120,8 @@ steps:
       - dfloo-profile
       - --timeout=300s
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-BackendConfig
     name: "gcr.io/cloud-builders/kubectl"
@@ -150,8 +130,8 @@ steps:
       - "-f"
       - k8s/backend-config.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-API
     name: "gcr.io/cloud-builders/kubectl"
@@ -160,8 +140,8 @@ steps:
       - "-f"
       - k8s/api.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Update-API-Image
     name: "gcr.io/cloud-builders/kubectl"
@@ -173,8 +153,8 @@ steps:
       - "-n"
       - "dfloo-profile"
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Wait-API-Rollout
     name: "gcr.io/cloud-builders/kubectl"
@@ -186,8 +166,8 @@ steps:
       - dfloo-profile
       - --timeout=300s
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Apply-Ingress
     name: "gcr.io/cloud-builders/kubectl"
@@ -196,8 +176,8 @@ steps:
       - "-f"
       - k8s/ingress.yaml
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
   - id: Get-Ingress
     name: "gcr.io/cloud-builders/kubectl"
@@ -208,8 +188,8 @@ steps:
       - "-n"
       - "dfloo-profile"
     env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
+      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
 images:
   - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
