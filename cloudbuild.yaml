@@ -1,23 +1,23 @@
 steps:
-  - id: Build
-    name: gcr.io/cloud-builders/docker
-    args:
-      - build
-      - "--no-cache"
-      - "-t"
-      - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
-      - "-t"
-      - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
-      - "-f"
-      - Dockerfile
-      - "."
+  # - id: Build
+  #   name: gcr.io/cloud-builders/docker
+  #   args:
+  #     - build
+  #     - "--no-cache"
+  #     - "-t"
+  #     - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
+  #     - "-t"
+  #     - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
+  #     - "-f"
+  #     - Dockerfile
+  #     - "."
 
-  - id: Push
-    name: gcr.io/cloud-builders/docker
-    args:
-      - push
-      - "--all-tags"
-      - "gcr.io/$PROJECT_ID/dfloo-profile-go"
+  # - id: Push
+  #   name: gcr.io/cloud-builders/docker
+  #   args:
+  #     - push
+  #     - "--all-tags"
+  #     - "gcr.io/$PROJECT_ID/dfloo-profile-go"
 
   - id: Get-Credentials
     name: "gcr.io/cloud-builders/gcloud"
@@ -28,26 +28,6 @@ steps:
       - dfloo-profile-cluster
       - --region=us-west1
       - --project=${PROJECT_ID}
-
-  - id: Preflight-Cluster-Health
-    name: "gcr.io/cloud-builders/kubectl"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        echo "Checking for nodes..."
-        kubectl get nodes -o wide || true
-
-        NODE_COUNT=$$(kubectl get nodes --no-headers 2>/dev/null | wc -l || true)
-        if [[ "$$NODE_COUNT" -eq 0 ]]; then
-          echo "No nodes found. Printing recent cluster events:"
-          kubectl get events -A --sort-by=.lastTimestamp | tail -n 100 || true
-          echo "Failing early because Autopilot did not provision nodes."
-          exit 1
-        fi
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=us-west1"
-      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
 
   - id: Apply-Manifests
     name: "gcr.io/cloud-builders/kubectl"
@@ -99,6 +79,26 @@ steps:
           --from-file=db/migrations/ \
           --namespace=dfloo-profile \
           --dry-run=client -o yaml | kubectl apply -f -
+    env:
+      - "CLOUDSDK_COMPUTE_REGION=us-west1"
+      - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
+
+  - id: Preflight-Cluster-Health
+    name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Checking for nodes..."
+        kubectl get nodes -o wide || true
+
+        NODE_COUNT=$$(kubectl get nodes --no-headers 2>/dev/null | wc -l || true)
+        if [[ "$$NODE_COUNT" -eq 0 ]]; then
+          echo "No nodes found. Printing recent cluster events:"
+          kubectl get events -A --sort-by=.lastTimestamp | tail -n 100 || true
+          echo "Failing early because Autopilot did not provision nodes."
+          exit 1
+        fi
     env:
       - "CLOUDSDK_COMPUTE_REGION=us-west1"
       - "CLOUDSDK_CONTAINER_CLUSTER=dfloo-profile-cluster"
