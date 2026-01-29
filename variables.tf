@@ -28,16 +28,16 @@ variable "k8s_namespace" {
   default     = "dfloo-profile"
 }
 
-variable "service_account_name" {
+variable "k8s_service_account_name" {
   description = "Google service account name used by the KSA"
   type        = string
   default     = "dfloo-profile-k8s"
 }
 
-variable "k8s_service_account_name" {
-  description = "Kubernetes service account name (used for workload identity binding)"
+variable "cloudbuild_service_account_name" {
+  description = "Google service account name used by Cloudbuild"
   type        = string
-  default     = "dfloo-profile-k8s"
+  default     = "dfloo-profile-builder"
 }
 
 variable "required_apis" {

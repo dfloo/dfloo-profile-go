@@ -12,7 +12,6 @@ terraform {
 locals {
   workload_pool            = "${var.project_id}.svc.id.goog"
   workload_identity_member = format("serviceAccount:%s.svc.id.goog[%s/%s]", var.project_id, var.k8s_namespace, var.k8s_service_account_name)
-  cloudbuild_sa_email      = format("serviceAccount:%s@cloudbuild.gserviceaccount.com", data.google_project.current.number)
 }
 
 provider "google" {
@@ -32,16 +31,16 @@ resource "google_project_service" "required" {
   disable_on_destroy = false
 }
 
-resource "google_project_iam_member" "cloudbuild_storage_admin" {
-  project = var.project_id
-  role    = "roles/storage.admin"
-  member  = local.cloudbuild_sa_email
-}
-
 resource "google_service_account" "ksa_gsa" {
   project      = var.project_id
-  account_id   = var.service_account_name
+  account_id   = var.k8s_service_account_name
   display_name = "KSA Google Service Account"
+}
+
+resource "google_service_account" "cloudbuild_gsa" {
+    project = var.project_id
+    account_id = var.cloudbuild_service_account_name
+    display_name = "Cloudbuild Google Service Account"
 }
 
 resource "google_service_account_iam_member" "ksa_workload_identity_binding" {
@@ -92,22 +91,25 @@ resource "google_project_iam_member" "cloud_sql_client" {
   member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
 }
 
-resource "google_project_iam_member" "ksa_artifactregistry_writer" {
+resource "google_project_iam_member" "cloudbuild_artifactregistry_writer" {
   project = var.project_id
   role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
-
-resource "google_project_iam_member" "ksa_storage_admin" {
+resource "google_project_iam_member" "cloudbuild_storage_admin" {
   project = var.project_id
   role    = "roles/storage.admin"
-  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
-
-resource "google_project_iam_member" "ksa_logging_writer" {
+resource "google_project_iam_member" "cloudbuild_log_writer" {
   project = var.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
+}
+resource "google_project_iam_member" "cloudbuild_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
 
 resource "google_compute_global_address" "api_static_ip" {
