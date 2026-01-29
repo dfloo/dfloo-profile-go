@@ -1,2 +1,13 @@
+.vscode
 .env*
-/k8s/local
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
