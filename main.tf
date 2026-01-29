@@ -56,10 +56,63 @@ resource "google_project_iam_member" "secret_accessor_iam" {
   member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
 }
 
-resource "google_project_iam_member" "cloudbuild_container_admin" {
+resource "google_project_iam_member" "workload_identity_user" {
+  project = var.project_id
+  role    = "roles/iam.workloadIdentityUser"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "kubernetes_engine_developer" {
+  project = var.project_id
+  role    = "roles/container.developer"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "kubernetes_engine_admin" {
   project = var.project_id
   role    = "roles/container.admin"
-  member  = local.cloudbuild_sa_email
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "kubernetes_engine_cluster_admin" {
+  project = var.project_id
+  role    = "roles/container.clusterAdmin"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "kubernetes_engine_default_node_service_account" {
+  project = var.project_id
+  role    = "roles/container.defaultNodeServiceAccount"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "cloud_sql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "ksa_artifactregistry_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "ksa_storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "ksa_logging_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_compute_global_address" "api_static_ip" {
+  name    = "api-static-ip"
+  project = var.project_id
 }
 
 resource "google_container_cluster" "autopilot_cluster" {

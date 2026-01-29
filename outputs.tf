@@ -15,3 +15,8 @@ output "workload_identity_member" {
   value       = local.workload_identity_member
   sensitive   = false
 }
+
+output "api_static_ip_address" {
+  description = "Global static IP reserved for the Ingress"
+  value       = google_compute_global_address.api_static_ip.address
+}
