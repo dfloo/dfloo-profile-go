@@ -10,7 +10,7 @@ spec:
   template:
     spec:
       automountServiceAccountToken: true
-      serviceAccountName: dfloo-profile-ksa
+      serviceAccountName: dfloo-profile-k8s
       tolerations:
         - key: "node.gke.io/balloon-pod-resize"
           operator: "Exists"

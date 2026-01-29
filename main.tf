@@ -39,6 +39,7 @@ resource "google_project_iam_member" "cloudbuild_storage_admin" {
 }
 
 resource "google_service_account" "ksa_gsa" {
+  project      = var.project_id
   account_id   = var.service_account_name
   display_name = "KSA Google Service Account"
 }
