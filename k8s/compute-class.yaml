@@ -1,0 +1,15 @@
+apiVersion: cloud.google.com/v1
+kind: ComputeClass
+metadata:
+  name: dfloo-compute-class
+spec:
+  nodePoolAutoCreation:
+    enabled: true
+    machineType: e2-medium
+    diskType: pd-standard
+    diskSizeGb: 20
+    minNodeCount: 1
+    maxNodeCount: 3
+  priorities:
+    - machineFamily: e2
+  whenUnsatisfiable: DoNotScaleUp
