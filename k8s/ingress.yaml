@@ -14,9 +14,9 @@ metadata:
   namespace: dfloo-profile
   annotations:
     networking.gke.io/managed-certificates: "api-certificate"
+    kubernetes.io/ingress.class: "gce"
     kubernetes.io/ingress.global-static-ip-name: "api-static-ip"
 spec:
-  ingressClassName: gce
   defaultBackend:
     service:
       name: dfloo-profile-api
