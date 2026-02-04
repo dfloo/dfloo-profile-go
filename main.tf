@@ -79,16 +79,16 @@ resource "google_project_iam_member" "kubernetes_engine_cluster_admin" {
   member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
 }
 
-resource "google_project_iam_member" "kubernetes_engine_default_node_service_account" {
-  project = var.project_id
-  role    = "roles/container.defaultNodeServiceAccount"
-  member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
-}
-
 resource "google_project_iam_member" "cloud_sql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.ksa_gsa.email}"
+}
+
+resource "google_project_iam_member" "kubernetes_engine_default_node_service_account" {
+  project = var.project_id
+  role    = "roles/container.defaultNodeServiceAccount"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "cloudbuild_artifactregistry_writer" {
@@ -96,19 +96,34 @@ resource "google_project_iam_member" "cloudbuild_artifactregistry_writer" {
   role    = "roles/artifactregistry.writer"
   member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
+
 resource "google_project_iam_member" "cloudbuild_storage_admin" {
   project = var.project_id
   role    = "roles/storage.admin"
   member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
+
 resource "google_project_iam_member" "cloudbuild_log_writer" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
+
 resource "google_project_iam_member" "cloudbuild_secret_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_clusters_get" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_container_admin" {
+  project = var.project_id
+  role    = "roles/container.admin"
   member  = "serviceAccount:${google_service_account.cloudbuild_gsa.email}"
 }
 

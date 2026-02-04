@@ -16,6 +16,7 @@ type TemplateData struct {
 	Date       string
 	Address    string
 	FontFamily string
+	Summary    string
 	Experience []model.Experience
 	Education  []model.Education
 	Skills     []string
@@ -80,6 +81,7 @@ func FormatTemplateData(resume *model.Resume) TemplateData {
 		FullName:   FormatFullName(&resume.Profile),
 		Date:       resume.Updated.Format("01-02-2006"),
 		Address:    FormatAddress(&resume.Profile),
+		Summary:    EscapeSpecialChars(resume.Summary),
 		Experience: FormatExperience(resume.Experience),
 		Education:  FormatEducation(resume.Education),
 		Skills:     FormatSkills(resume.Skills),
