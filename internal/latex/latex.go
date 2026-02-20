@@ -1,11 +1,16 @@
 package latex
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 )
@@ -53,15 +58,26 @@ func GenerateFromResume(resume *model.Resume) (string, error) {
 }
 
 func ConvertToPDF(filePath string) ([]byte, error) {
-	dir := ""
-	if idx := len(filePath) - len("/resume.tex"); idx > 0 {
-		dir = filePath[:idx]
-	}
+	dir := filepath.Dir(filePath)
+	timeout := getLatexTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	cmd := exec.Command("lualatex", "-output-directory", dir, filePath)
+	cmd := exec.CommandContext(
+		ctx,
+		"lualatex",
+		"-interaction=nonstopmode",
+		"-halt-on-error",
+		"-output-directory",
+		dir,
+		filePath,
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("latex conversion timed out after %s", timeout)
+		}
 		log.Printf("Error converting LaTeX to PDF: %v", err)
 		return nil, err
 	}
@@ -73,6 +89,15 @@ func ConvertToPDF(filePath string) ([]byte, error) {
 		return nil, err
 	}
 	return pdfBytes, nil
+}
+
+func getLatexTimeout() time.Duration {
+	seconds, err := strconv.Atoi(os.Getenv("LATEX_TIMEOUT_SECONDS"))
+	if err != nil || seconds <= 0 {
+		return 2 * time.Minute
+	}
+
+	return time.Duration(seconds) * time.Second
 }
 
 func FormatTemplateData(resume *model.Resume) TemplateData {

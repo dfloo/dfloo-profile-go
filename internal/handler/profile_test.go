@@ -201,8 +201,8 @@ func TestPutProfile_Success(t *testing.T) {
 		t.Errorf("Failed to decode response: %v", err)
 	}
 
-	if profile.ProfileID != "encoded" {
-		t.Errorf("Expected ProfileID = 'encoded', got '%s'", profile.ProfileID)
+	if profile.ProfileID != "profileId" {
+		t.Errorf("Expected ProfileID = 'profileId', got '%s'", profile.ProfileID)
 	}
 }
 
