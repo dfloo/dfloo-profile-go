@@ -254,25 +254,52 @@ func DownloadResume(w http.ResponseWriter, resume *model.Resume) {
 	var pdfBytes []byte
 	if _, err := os.Stat(cachedHashPath); err == nil {
 		log.Print("Serving cached resume pdf")
-		pdfBytes, _ = os.ReadFile(cachedHashPath)
+		pdfBytes, err = os.ReadFile(cachedHashPath)
+		if err != nil {
+			log.Printf("failed to read cached resume pdf: %v", err)
+			http.Error(w, "Failed to read resume PDF cache", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		log.Print("Generating resume pdf")
-		filePath, _ := latex.GenerateFromResume(resume)
+		filePath, err := latex.GenerateFromResume(resume)
+		if err != nil {
+			log.Printf("failed to generate resume tex file: %v", err)
+			http.Error(w, "Failed to prepare resume PDF", http.StatusInternalServerError)
+			return
+		}
+
+		tempDir := filepath.Dir(filePath)
+		defer func() {
+			if tempDir != "" {
+				if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+					log.Printf("failed to remove temporary resume dir: %v", removeErr)
+				}
+			}
+		}()
+
 		pdfBytes, err = latex.ConvertToPDF(filePath)
 		if err != nil {
+			log.Printf("failed to convert resume tex to pdf: %v", err)
 			http.Error(w, "Failed to generate resume PDF", http.StatusInternalServerError)
 			return
 		}
-		os.MkdirAll(cachePath, 0755)
-		os.WriteFile(cachedHashPath, pdfBytes, 0644)
-		defer os.RemoveAll(filePath[:len(filePath)-len("resume.tex")])
+		if err := os.MkdirAll(cachePath, 0755); err != nil {
+			log.Printf("failed to create resume cache dir: %v", err)
+		} else if err := os.WriteFile(cachedHashPath, pdfBytes, 0644); err != nil {
+			log.Printf("failed to write resume cache file: %v", err)
+		}
 	}
-	CleanUpOldCacheFiles(cachePath, 24*time.Hour)
+	if err := CleanUpOldCacheFiles(cachePath, 24*time.Hour); err != nil {
+		log.Printf("failed to cleanup old resume cache files: %v", err)
+	}
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "attachment; filename=resume.pdf")
 	w.WriteHeader(http.StatusOK)
-	w.Write(pdfBytes)
+	if _, err := w.Write(pdfBytes); err != nil {
+		log.Printf("failed to write resume pdf response: %v", err)
+	}
 }
 
 func ResumeHash(resume *model.Resume) (string, error) {

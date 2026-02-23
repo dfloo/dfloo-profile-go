@@ -239,8 +239,8 @@ func TestPutResume_Success(t *testing.T) {
 		t.Errorf("Failed to decode response: %v", err)
 	}
 
-	if resume.ResumeID != "encoded" {
-		t.Errorf("Expected encoded ResumeID 'encoded', got '%s'", resume.ResumeID)
+	if resume.ResumeID != "resumeId" {
+		t.Errorf("Expected encoded ResumeID 'resumeId', got '%s'", resume.ResumeID)
 	}
 }
 

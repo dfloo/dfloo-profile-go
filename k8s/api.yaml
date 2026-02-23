@@ -42,6 +42,12 @@ spec:
               value: "127.0.0.1"
             - name: PGPORT
               value: "5432"
+            - name: HOME
+              value: "/tmp"
+            - name: TEXMFCACHE
+              value: "/tmp/texmf-cache"
+            - name: TEXMFVAR
+              value: "/tmp/texmf-cache"
             - name: AUTH0_AUDIENCE
               valueFrom:
                 configMapKeyRef:
@@ -64,19 +70,34 @@ spec:
               export PGDATABASE=$(cat /mnt/secrets-store/postgres-db)
               export PGUSER=$(cat /mnt/secrets-store/postgres-user)
               export PGPASSWORD=$(cat /mnt/secrets-store/postgres-password)
+              mkdir -p "$HOME" "$TEXMFCACHE" "$TEXMFVAR" /tmp/tex-warmup
+              cat > /tmp/tex-warmup/warmup.tex <<'EOF'
+              \documentclass{article}
+              \begin{document}
+              warmup
+              \end{document}
+              EOF
+              lualatex -interaction=nonstopmode -halt-on-error -output-directory /tmp/tex-warmup /tmp/tex-warmup/warmup.tex > /tmp/tex-warmup/lualatex.log 2>&1 || { cat /tmp/tex-warmup/lualatex.log; exit 1; }
               /dfloo-profile-go
           resources:
             requests:
-              memory: "64Mi"
+              memory: "128Mi"
               cpu: "50m"
             limits:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "200m"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -84,14 +105,16 @@ spec:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
             periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            timeoutSeconds: 5
+            failureThreshold: 12
           volumeMounts:
             - name: secrets-store-inline
               mountPath: "/mnt/secrets-store"
               readOnly: true
+            - name: tex-cache
+              mountPath: "/tmp/texmf-cache"
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:buster
           command:
@@ -127,3 +150,6 @@ spec:
             readOnly: true
             volumeAttributes:
               secretProviderClass: "app-secrets-provider"
+        - name: tex-cache
+          emptyDir:
+            sizeLimit: "256Mi"
