@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/dfloo/dfloo-profile-go/internal/latex"
@@ -270,7 +269,7 @@ func DownloadResume(w http.ResponseWriter, resume *model.Resume) {
 			return
 		}
 
-		tempDir := strings.TrimSuffix(filePath, "/resume.tex")
+		tempDir := filepath.Dir(filePath)
 		defer func() {
 			if tempDir != "" {
 				if removeErr := os.RemoveAll(tempDir); removeErr != nil {

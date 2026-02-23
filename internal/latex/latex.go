@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -59,7 +58,7 @@ func GenerateFromResume(resume *model.Resume) (string, error) {
 
 func ConvertToPDF(filePath string) ([]byte, error) {
 	dir := filepath.Dir(filePath)
-	timeout := getLatexTimeout()
+	timeout := 2 * time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -89,15 +88,6 @@ func ConvertToPDF(filePath string) ([]byte, error) {
 		return nil, err
 	}
 	return pdfBytes, nil
-}
-
-func getLatexTimeout() time.Duration {
-	seconds, err := strconv.Atoi(os.Getenv("LATEX_TIMEOUT_SECONDS"))
-	if err != nil || seconds <= 0 {
-		return 2 * time.Minute
-	}
-
-	return time.Duration(seconds) * time.Second
 }
 
 func FormatTemplateData(resume *model.Resume) TemplateData {
