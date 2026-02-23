@@ -77,7 +77,7 @@ spec:
               warmup
               \end{document}
               EOF
-              lualatex -interaction=nonstopmode -halt-on-error -output-directory /tmp/tex-warmup /tmp/tex-warmup/warmup.tex > /tmp/tex-warmup/lualatex.log 2>&1 || true
+              lualatex -interaction=nonstopmode -halt-on-error -output-directory /tmp/tex-warmup /tmp/tex-warmup/warmup.tex > /tmp/tex-warmup/lualatex.log 2>&1 || { cat /tmp/tex-warmup/lualatex.log; exit 1; }
               /dfloo-profile-go
           resources:
             requests:

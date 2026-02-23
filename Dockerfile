@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-luatex \
     texlive-latex-base \
     texlive-latex-recommended \
+    texlive-latex-extra \
     texlive-fonts-recommended \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/share/doc/* \
