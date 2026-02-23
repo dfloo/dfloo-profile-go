@@ -42,7 +42,11 @@ spec:
               value: "127.0.0.1"
             - name: PGPORT
               value: "5432"
+            - name: HOME
+              value: "/tmp"
             - name: TEXMFCACHE
+              value: "/tmp/texmf-cache"
+            - name: TEXMFVAR
               value: "/tmp/texmf-cache"
             - name: AUTH0_AUDIENCE
               valueFrom:
@@ -66,7 +70,7 @@ spec:
               export PGDATABASE=$(cat /mnt/secrets-store/postgres-db)
               export PGUSER=$(cat /mnt/secrets-store/postgres-user)
               export PGPASSWORD=$(cat /mnt/secrets-store/postgres-password)
-              mkdir -p "$TEXMFCACHE" /tmp/tex-warmup
+              mkdir -p "$HOME" "$TEXMFCACHE" "$TEXMFVAR" /tmp/tex-warmup
               cat > /tmp/tex-warmup/warmup.tex <<'EOF'
               \documentclass{article}
               \begin{document}
@@ -147,4 +151,5 @@ spec:
             volumeAttributes:
               secretProviderClass: "app-secrets-provider"
         - name: tex-cache
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: "256Mi"

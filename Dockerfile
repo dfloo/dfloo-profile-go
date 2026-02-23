@@ -1,22 +1,27 @@
-FROM golang:alpine AS builder
+FROM golang:1.24-bookworm AS builder
 WORKDIR /app
 ADD . /app
 RUN go build -o /dfloo-profile-go ./cmd/server
 
-FROM golang:alpine
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache \
-    texlive \
-    texlive-luatex \
-    texlive-most \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    && rm -rf /var/cache/apk/* \
+    fontconfig \
+    lmodern \
+    texlive-binaries \
+    texlive-luatex \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-fonts-recommended \
+    && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/share/doc/* \
     && rm -rf /usr/share/man/* \
-    && rm -rf /usr/share/texmf-dist/doc/* \
-    && find /usr/share/texmf-dist -name "*.pdf" -delete \
-    && find /usr/share/texmf-dist -name "*.dvi" -delete \
     && rm -rf /tmp/*
+
+ENV HOME=/tmp
+ENV TEXMFCACHE=/tmp/texmf-cache
+ENV TEXMFVAR=/tmp/texmf-cache
 
 WORKDIR /app
 
