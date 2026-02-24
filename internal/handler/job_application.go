@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 
 	"github.com/dfloo/dfloo-profile-go/internal/middleware"
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
+	"github.com/dfloo/dfloo-profile-go/internal/scraper"
 )
 
 type JobApplicationHandler struct {
@@ -81,6 +83,58 @@ func (h *JobApplicationHandler) PostJobApplication(w http.ResponseWriter, r *htt
 	if jobApplication.ResumeID != "" {
 		jobApplication.ResumeID = h.EncodeID(jobApplication.ResumeID)
 	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(&jobApplication)
+}
+
+func (h *JobApplicationHandler) PostJobApplicationFromURL(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	userID := h.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+
+	var request model.FromURLRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	parsedURL, err := url.ParseRequestURI(request.URL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+		return
+	}
+
+	extract, snapshot, err := scraper.ScrapeJobPosting(r.Context(), request.URL)
+	if err != nil {
+		http.Error(w, "Failed to scrape job posting", http.StatusBadRequest)
+		return
+	}
+
+	snapshotBytes, err := json.Marshal(snapshot)
+	if err != nil {
+		http.Error(w, "Failed to serialize job posting snapshot", http.StatusInternalServerError)
+		return
+	}
+
+	jobApplication := model.JobApplication{
+		Company:     extract.Company,
+		Role:        extract.Role,
+		Description: extract.Description,
+		SourceURL:   request.URL,
+		Snapshot:    snapshotBytes,
+	}
+
+	err = h.Repo.CreateJobApplication(r.Context(), &jobApplication, userID)
+	if err != nil {
+		http.Error(w, "Failed to create Job Application", http.StatusInternalServerError)
+		return
+	}
+
+	jobApplication.JobApplicationID = h.EncodeID(jobApplication.JobApplicationID)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(&jobApplication)

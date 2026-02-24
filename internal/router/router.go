@@ -96,5 +96,18 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
+	mux.HandleFunc("/api/job-applications/from-url", func(w http.ResponseWriter, r *http.Request) {
+		middleware.CoreAuthenticated(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodPost:
+					jobApplicationHandler.PostJobApplicationFromURL(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
 	return mux
 }

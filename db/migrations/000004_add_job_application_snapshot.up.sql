@@ -1,0 +1,3 @@
+ALTER TABLE job_application
+ADD COLUMN IF NOT EXISTS source_url TEXT,
+ADD COLUMN IF NOT EXISTS snapshot JSONB;
