@@ -1,7 +1,7 @@
 ---
-name: testing
+name: Testing
 description: A specialized agent for creating and updating focused, deterministic Go tests
-argument-hint: "Package to generate tests for"
+argument-hint: "Which package to generate tests for"
 tools: ["vscode", "read", "edit", "search"]
 ---
 
