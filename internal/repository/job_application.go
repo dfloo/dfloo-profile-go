@@ -35,6 +35,8 @@ func (r *DBJobApplicationRepository) GetJobApplicationsByUserID(
             role,
             description,
             notes,
+			source_url,
+			snapshot,
 			resume_id,
             created,
             updated
@@ -51,6 +53,8 @@ func (r *DBJobApplicationRepository) GetJobApplicationsByUserID(
 	for rows.Next() {
 		var jobApplication model.JobApplication
 		var resumeID *string
+		var sourceURL *string
+		var snapshotBytes []byte
 
 		err = rows.Scan(
 			&jobApplication.JobApplicationID,
@@ -60,6 +64,8 @@ func (r *DBJobApplicationRepository) GetJobApplicationsByUserID(
 			&jobApplication.Role,
 			&jobApplication.Description,
 			&jobApplication.Notes,
+			&sourceURL,
+			&snapshotBytes,
 			&resumeID,
 			&jobApplication.Created,
 			&jobApplication.Updated,
@@ -70,6 +76,12 @@ func (r *DBJobApplicationRepository) GetJobApplicationsByUserID(
 
 		if resumeID != nil {
 			jobApplication.ResumeID = *resumeID
+		}
+		if sourceURL != nil {
+			jobApplication.SourceURL = *sourceURL
+		}
+		if len(snapshotBytes) > 0 {
+			jobApplication.Snapshot = snapshotBytes
 		}
 
 		jobApplications = append(jobApplications, &jobApplication)
@@ -89,6 +101,14 @@ func (r *DBJobApplicationRepository) CreateJobApplication(
 	if jobApplication.ResumeID != "" {
 		resumeID = &jobApplication.ResumeID
 	}
+	var sourceURL *string
+	if jobApplication.SourceURL != "" {
+		sourceURL = &jobApplication.SourceURL
+	}
+	var snapshotBytes []byte
+	if len(jobApplication.Snapshot) > 0 {
+		snapshotBytes = jobApplication.Snapshot
+	}
 	err := r.Pool.QueryRow(
 		ctx,
 		`INSERT INTO job_application (
@@ -99,8 +119,10 @@ func (r *DBJobApplicationRepository) CreateJobApplication(
 			role,
 			description,
 			notes,
+			source_url,
+			snapshot,
 			resume_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		 RETURNING job_application_id, created, updated`,
 		userID,
 		jobApplication.Status,
@@ -109,6 +131,8 @@ func (r *DBJobApplicationRepository) CreateJobApplication(
 		jobApplication.Role,
 		jobApplication.Description,
 		jobApplication.Notes,
+		sourceURL,
+		snapshotBytes,
 		resumeID,
 	).Scan(
 		&jobApplication.JobApplicationID,
@@ -142,6 +166,14 @@ func (r *DBJobApplicationRepository) UpdateJobApplications(
 		if jobApplication.ResumeID != "" {
 			resumeID = &jobApplication.ResumeID
 		}
+		var sourceURL *string
+		if jobApplication.SourceURL != "" {
+			sourceURL = &jobApplication.SourceURL
+		}
+		var snapshotBytes []byte
+		if len(jobApplication.Snapshot) > 0 {
+			snapshotBytes = jobApplication.Snapshot
+		}
 		err := tx.QueryRow(
 			ctx,
 			`UPDATE job_application SET
@@ -151,8 +183,10 @@ func (r *DBJobApplicationRepository) UpdateJobApplications(
                 role = $4,
                 description = $5,
                 notes = $6,
-                resume_id = $7
-            WHERE job_application_id = $8 AND user_id = $9 
+                source_url = COALESCE($7, source_url),
+                snapshot = COALESCE($8, snapshot),
+                resume_id = $9
+            WHERE job_application_id = $10 AND user_id = $11 
             RETURNING created, updated`,
 			jobApplication.Status,
 			jobApplication.SortIndex,
@@ -160,6 +194,8 @@ func (r *DBJobApplicationRepository) UpdateJobApplications(
 			jobApplication.Role,
 			jobApplication.Description,
 			jobApplication.Notes,
+			sourceURL,
+			snapshotBytes,
 			resumeID,
 			jobApplication.JobApplicationID,
 			userID,
