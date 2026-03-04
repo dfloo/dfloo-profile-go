@@ -45,10 +45,35 @@ variable "required_apis" {
   type        = list(string)
   default = [
     "container.googleapis.com",
+    "logging.googleapis.com",
     "secretmanager.googleapis.com",
     "containerregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "storage.googleapis.com",
     "iam.googleapis.com",
   ]
+}
+
+variable "project_log_exclusions" {
+  description = "Project-level Cloud Logging exclusions"
+  type = map(object({
+    description = string
+    filter      = string
+    disabled    = optional(bool, false)
+  }))
+  default = {
+    exclude_k8s_health_checks = {
+      description = "Exclude low-value Kubernetes health check logs"
+      filter      = <<-EOT
+        resource.type="k8s_container"
+        severity=("DEFAULT" OR "INFO" OR "NOTICE")
+        (
+          textPayload:("/healthz" OR "/readyz" OR "/livez" OR "/health") OR
+          jsonPayload.message:("/healthz" OR "/readyz" OR "/livez" OR "/health") OR
+          httpRequest.requestUrl:("/healthz" OR "/readyz" OR "/livez" OR "/health")
+        )
+      EOT
+      disabled    = false
+    }
+  }
 }
