@@ -54,3 +54,18 @@ func TestNew_PublicDownloadRouteHandlesPreflight(t *testing.T) {
 		t.Fatalf("Access-Control-Allow-Origin = %q, want %q", got, "http://localhost:3000")
 	}
 }
+
+func TestNew_PublicMetricsRoute(t *testing.T) {
+	mux := New(nil)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if got := w.Header().Get("Content-Type"); got == "" {
+		t.Fatal("Content-Type header is empty")
+	}
+}

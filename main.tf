@@ -38,9 +38,9 @@ resource "google_service_account" "ksa_gsa" {
 }
 
 resource "google_service_account" "cloudbuild_gsa" {
-    project = var.project_id
-    account_id = var.cloudbuild_service_account_name
-    display_name = "Cloudbuild Google Service Account"
+  project      = var.project_id
+  account_id   = var.cloudbuild_service_account_name
+  display_name = "Cloudbuild Google Service Account"
 }
 
 resource "google_service_account_iam_member" "ksa_workload_identity_binding" {
@@ -137,6 +137,18 @@ resource "google_container_cluster" "autopilot_cluster" {
   location         = var.region
   project          = var.project_id
   enable_autopilot = var.enable_autopilot
+
+  monitoring_config {
+    managed_prometheus {
+      enabled = true
+    }
+
+    enable_components = [
+      "SYSTEM_COMPONENTS",
+      "CADVISOR",
+      "KUBELET",
+    ]
+  }
 
   workload_identity_config {
     workload_pool = local.workload_pool

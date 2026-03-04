@@ -45,6 +45,7 @@ variable "required_apis" {
   type        = list(string)
   default = [
     "container.googleapis.com",
+    "monitoring.googleapis.com",
     "secretmanager.googleapis.com",
     "containerregistry.googleapis.com",
     "cloudbuild.googleapis.com",
