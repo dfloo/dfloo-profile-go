@@ -150,6 +150,18 @@ resource "google_container_cluster" "autopilot_cluster" {
   project          = var.project_id
   enable_autopilot = var.enable_autopilot
 
+  monitoring_config {
+    managed_prometheus {
+      enabled = true
+    }
+
+    enable_components = [
+      "SYSTEM_COMPONENTS",
+      "CADVISOR",
+      "KUBELET",
+    ]
+  }
+
   workload_identity_config {
     workload_pool = local.workload_pool
   }
