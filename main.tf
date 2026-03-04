@@ -31,18 +31,6 @@ resource "google_project_service" "required" {
   disable_on_destroy = false
 }
 
-resource "google_logging_project_exclusion" "project_log_exclusions" {
-  for_each = var.project_log_exclusions
-
-  project     = var.project_id
-  name        = each.key
-  description = each.value.description
-  filter      = each.value.filter
-  disabled    = try(each.value.disabled, false)
-
-  depends_on = [google_project_service.required]
-}
-
 resource "google_service_account" "ksa_gsa" {
   project      = var.project_id
   account_id   = var.k8s_service_account_name
