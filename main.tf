@@ -143,11 +143,7 @@ resource "google_container_cluster" "autopilot_cluster" {
       enabled = true
     }
 
-    enable_components = [
-      "SYSTEM_COMPONENTS",
-      "CADVISOR",
-      "KUBELET",
-    ]
+    enable_components = []
   }
 
   workload_identity_config {
