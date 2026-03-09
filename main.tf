@@ -145,8 +145,6 @@ resource "google_container_cluster" "autopilot_cluster" {
 
     enable_components = [
       "SYSTEM_COMPONENTS",
-      "CADVISOR",
-      "KUBELET",
     ]
   }
 
