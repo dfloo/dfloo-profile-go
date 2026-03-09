@@ -15,6 +15,10 @@ spec:
         - action: drop
           sourceLabels:
             - __name__
-          regex: go_.*|process_.*|promhttp_.*|http_.*
+          regex: go_.*|process_.*|promhttp_.*|http_handler_.*
+        - action: drop
+          sourceLabels:
+            - __name__
+          regex: http_request_duration_seconds_bucket
         - action: labeldrop
           regex: uid|pod_uid|container_id|image_id

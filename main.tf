@@ -143,7 +143,9 @@ resource "google_container_cluster" "autopilot_cluster" {
       enabled = true
     }
 
-    enable_components = []
+    enable_components = [
+      "SYSTEM_COMPONENTS",
+    ]
   }
 
   workload_identity_config {
