@@ -73,16 +73,6 @@ steps:
       - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
       - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
 
-  - id: Apply-Monitoring
-    name: "gcr.io/cloud-builders/kubectl"
-    args:
-      - apply
-      - "-f"
-      - k8s/monitoring/
-    env:
-      - "CLOUDSDK_COMPUTE_REGION=${_REGION}"
-      - "CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}"
-
   - id: Apply-Secret-Provider
     name: "gcr.io/cloud-builders/kubectl"
     args:

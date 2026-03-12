@@ -7,7 +7,6 @@ import (
 	"github.com/dfloo/dfloo-profile-go/internal/middleware"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func New(pool *pgxpool.Pool) *http.ServeMux {
@@ -22,7 +21,6 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 	healthHandler := handler.NewHealthHandler(pool)
 
 	mux.HandleFunc("GET /health", healthHandler.HealthCheck)
-	mux.Handle("GET /metrics", promhttp.Handler())
 
 	mux.HandleFunc("/api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		middleware.CoreAuthenticated(
