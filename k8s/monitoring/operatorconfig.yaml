@@ -5,4 +5,4 @@ metadata:
   namespace: gmp-public
 collection:
   kubeletScraping:
-    interval: 120s
+    interval: 60s

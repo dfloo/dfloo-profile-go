@@ -10,15 +10,11 @@ spec:
   endpoints:
     - port: 8080
       path: /metrics
-      interval: 120s
+      interval: 60s
       metricRelabeling:
         - action: drop
           sourceLabels:
             - __name__
-          regex: go_.*|process_.*|promhttp_.*|http_handler_.*
-        - action: drop
-          sourceLabels:
-            - __name__
-          regex: http_request_duration_seconds_bucket
+          regex: go_gc_.*|go_memstats_.*|process_.*
         - action: labeldrop
           regex: uid|pod_uid|container_id|image_id
