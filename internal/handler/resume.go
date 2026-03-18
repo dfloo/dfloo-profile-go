@@ -263,23 +263,31 @@ func (h *ResumeHandler) DownloadDefaultResumePDF(w http.ResponseWriter, r *http.
 }
 
 func (h *ResumeHandler) DownloadResumePDF(w http.ResponseWriter, r *http.Request) {
-	var resume model.Resume
-	if err := json.NewDecoder(r.Body).Decode(&resume); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if resume.ResumeID == "" {
+	encodedResumeID := r.PathValue("resumeId")
+	if encodedResumeID == "" {
 		http.Error(w, "resumeId is required", http.StatusBadRequest)
 		return
 	}
-	decodedResumeID, err := h.DecodeID(resume.ResumeID)
+
+	userID := h.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	decodedResumeID, err := h.DecodeID(encodedResumeID)
 	if err != nil {
 		http.Error(w, "Failed to decode resumeID", http.StatusBadRequest)
 		return
 	}
-	resume.ResumeID = decodedResumeID
 
-	h.downloadResume(w, &resume)
+	resume, err := h.Repo.GetResumeByID(r.Context(), decodedResumeID, userID)
+	if err != nil {
+		http.Error(w, "Resume not found", http.StatusNotFound)
+		return
+	}
+
+	h.downloadResume(w, resume)
 }
 
 func (h *ResumeHandler) downloadResume(w http.ResponseWriter, resume *model.Resume) {

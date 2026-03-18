@@ -495,22 +495,23 @@ func TestDeleteResumes_RepositoryError(t *testing.T) {
 	}
 }
 
-func TestDownloadResumePDF_InvalidJSON(t *testing.T) {
+func TestDownloadResumePDF_NoUserID(t *testing.T) {
 	handler := createTestResumeHandler(t, &MockResumeRepository{})
-	req := testutil.CreateRequestWithBody("POST", "/download", "invalid json", "")
+	req := testutil.CreateRequestWithUserID("GET", "/download/encoded", "")
+	req.SetPathValue("resumeId", "encoded")
 	w := httptest.NewRecorder()
 
 	handler.DownloadResumePDF(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
 	}
 }
 
 func TestDownloadResumePDF_MissingResumeID(t *testing.T) {
 	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	handler.CacheDir = t.TempDir()
-	req := testutil.CreateRequestWithBody("POST", "/download", `{}`, "")
+	req := testutil.CreateRequestWithUserID("GET", "/download", "test")
 	w := httptest.NewRecorder()
 
 	handler.DownloadResumePDF(w, req)
@@ -520,8 +521,54 @@ func TestDownloadResumePDF_MissingResumeID(t *testing.T) {
 	}
 }
 
-func TestDownloadResumePDF_StartsGenerationOnCacheMiss(t *testing.T) {
+func TestDownloadResumePDF_DecodeError(t *testing.T) {
 	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	req := testutil.CreateRequestWithUserID("GET", "/download/invalid", "test")
+	req.SetPathValue("resumeId", "invalid")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_ResumeNotFound(t *testing.T) {
+	mockRepo := &MockResumeRepository{
+		GetResumeByIDFunc: func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
+			return nil, errors.New("not found")
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+	req := testutil.CreateRequestWithUserID("GET", "/download/encoded", "test")
+	req.SetPathValue("resumeId", "encoded")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_StartsGenerationOnCacheMiss(t *testing.T) {
+	mockRepo := &MockResumeRepository{
+		GetResumeByIDFunc: func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
+			if userID != "test" {
+				t.Fatalf("Expected userID test, got %s", userID)
+			}
+			if resumeID != "decoded" {
+				t.Fatalf("Expected resumeID decoded, got %s", resumeID)
+			}
+			resume := testutil.MockResume()
+			resume.ResumeID = resumeID
+			return resume, nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
 	handler.CacheDir = t.TempDir()
 
 	var generationCount int32
@@ -534,7 +581,8 @@ func TestDownloadResumePDF_StartsGenerationOnCacheMiss(t *testing.T) {
 		return []byte("generated-pdf"), nil
 	}
 
-	req := testutil.CreateRequestWithBody("POST", "/download", testutil.MockResumeJSON(), "")
+	req := testutil.CreateRequestWithUserID("GET", "/download/encoded", "test")
+	req.SetPathValue("resumeId", "encoded")
 	w := httptest.NewRecorder()
 
 	handler.DownloadResumePDF(w, req)
