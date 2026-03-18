@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -241,6 +243,8 @@ func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.deleteResumeCacheFiles(deletedIDs)
+
 	for i := range deletedIDs {
 		deletedIDs[i] = h.EncodeID(deletedIDs[i])
 	}
@@ -339,16 +343,33 @@ func (h *ResumeHandler) getOrGenerateResumePDF(resume *model.Resume) ([]byte, er
 }
 
 func (h *ResumeHandler) generateResumePDFWithInflight(resume *model.Resume) error {
-	for {
-		generation, owner := h.registerInflightGeneration(resume.ResumeID)
-		if owner {
-			generation.err = h.generateResumePDF(resume)
-			h.completeInflightGeneration(resume.ResumeID)
-			return generation.err
-		}
-
-		<-generation.done
+	cacheFilePath := h.resumeCacheFilePath(resume.ResumeID)
+	if _, err := os.Stat(cacheFilePath); err == nil {
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
+
+	generation, owner := h.registerInflightGeneration(resume.ResumeID)
+	if owner {
+		generation.err = h.generateResumePDF(resume)
+		h.completeInflightGeneration(resume.ResumeID)
+		return generation.err
+	}
+
+	<-generation.done
+	if generation.err != nil {
+		return generation.err
+	}
+
+	_, err := os.Stat(cacheFilePath)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return errors.New("resume pdf generation completed without cache file")
+	}
+	return err
 }
 
 func (h *ResumeHandler) generateResumePDF(resume *model.Resume) error {
@@ -428,7 +449,21 @@ func (h *ResumeHandler) completeInflightGeneration(resumeID string) {
 }
 
 func (h *ResumeHandler) resumeCacheFilePath(resumeID string) string {
-	return filepath.Join(h.getCacheDir(), resumeID+".pdf")
+	return filepath.Join(h.getCacheDir(), safeResumeCacheFilename(resumeID))
+}
+
+func (h *ResumeHandler) deleteResumeCacheFiles(resumeIDs []string) {
+	for _, resumeID := range resumeIDs {
+		cacheFilePath := h.resumeCacheFilePath(resumeID)
+		if err := os.Remove(cacheFilePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Printf("failed to remove resume cache file for resumeID=%s: %v", resumeID, err)
+		}
+	}
+}
+
+func safeResumeCacheFilename(resumeID string) string {
+	hash := sha256.Sum256([]byte(resumeID))
+	return hex.EncodeToString(hash[:]) + ".pdf"
 }
 
 func (h *ResumeHandler) getCacheDir() string {
