@@ -27,6 +27,8 @@ spec:
       app: dfloo-profile-api
   template:
     metadata:
+      annotations:
+        gke-gcsfuse/volumes: "true"
       labels:
         app: dfloo-profile-api
     spec:
