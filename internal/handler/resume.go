@@ -2,14 +2,14 @@ package handler
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
+	"sync"
 
 	"github.com/dfloo/dfloo-profile-go/internal/latex"
 	"github.com/dfloo/dfloo-profile-go/internal/middleware"
@@ -23,6 +23,18 @@ type ResumeHandler struct {
 	EncodeID      func(string) string
 	DecodeID      func(string) (string, error)
 	HasPermission func(context.Context, string) bool
+	CacheDir      string
+
+	GenerateFromResume func(*model.Resume) (string, error)
+	ConvertToPDF       func(string) ([]byte, error)
+
+	inflightMu  sync.Mutex
+	inflightPDF map[string]*resumePDFGeneration
+}
+
+type resumePDFGeneration struct {
+	done chan struct{}
+	err  error
 }
 
 func NewResumeHandler(repo repository.ResumeRepository) *ResumeHandler {
@@ -32,7 +44,19 @@ func NewResumeHandler(repo repository.ResumeRepository) *ResumeHandler {
 		EncodeID:      middleware.EncodeID,
 		DecodeID:      middleware.DecodeID,
 		HasPermission: middleware.HasPermission,
+		CacheDir:      getResumeCacheDir(),
+
+		GenerateFromResume: latex.GenerateFromResume,
+		ConvertToPDF:       latex.ConvertToPDF,
+		inflightPDF:        make(map[string]*resumePDFGeneration),
 	}
+}
+
+func getResumeCacheDir() string {
+	if cacheDir := os.Getenv("RESUME_CACHE_PATH"); cacheDir != "" {
+		return cacheDir
+	}
+	return "/tmp/resume_cache"
 }
 
 func (h *ResumeHandler) GetUserResumes(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +102,7 @@ func (h *ResumeHandler) PostResume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create resume", http.StatusInternalServerError)
 		return
 	}
+	h.triggerAsyncResumePDFGeneration(&resume)
 	resume.ResumeID = h.EncodeID(resume.ResumeID)
 	resume.Profile.ProfileID = h.EncodeID(resume.Profile.ProfileID)
 
@@ -119,6 +144,7 @@ func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to update resume", http.StatusInternalServerError)
 		return
 	}
+	h.triggerAsyncResumePDFGeneration(&resume)
 	resume.ResumeID = encodedResumeID
 	resume.Profile.ProfileID = encodedProfileID
 
@@ -229,7 +255,7 @@ func (h *ResumeHandler) DownloadDefaultResumePDF(w http.ResponseWriter, r *http.
 		return
 	}
 
-	DownloadResume(w, resume)
+	h.downloadResume(w, resume)
 }
 
 func (h *ResumeHandler) DownloadResumePDF(w http.ResponseWriter, r *http.Request) {
@@ -238,60 +264,31 @@ func (h *ResumeHandler) DownloadResumePDF(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+	if resume.ResumeID == "" {
+		http.Error(w, "resumeId is required", http.StatusBadRequest)
+		return
+	}
+	decodedResumeID, err := h.DecodeID(resume.ResumeID)
+	if err != nil {
+		http.Error(w, "Failed to decode resumeID", http.StatusBadRequest)
+		return
+	}
+	resume.ResumeID = decodedResumeID
 
-	DownloadResume(w, &resume)
+	h.downloadResume(w, &resume)
 }
 
-func DownloadResume(w http.ResponseWriter, resume *model.Resume) {
-	hash, err := ResumeHash(resume)
-	if err != nil {
-		http.Error(w, "Failed to generate resume hash", http.StatusInternalServerError)
+func (h *ResumeHandler) downloadResume(w http.ResponseWriter, resume *model.Resume) {
+	if resume == nil || resume.ResumeID == "" {
+		http.Error(w, "resumeId is required", http.StatusBadRequest)
 		return
 	}
 
-	cachePath := "/tmp/resume_cache/"
-	cachedHashPath := cachePath + hash + ".pdf"
-	var pdfBytes []byte
-	if _, err := os.Stat(cachedHashPath); err == nil {
-		log.Print("Serving cached resume pdf")
-		pdfBytes, err = os.ReadFile(cachedHashPath)
-		if err != nil {
-			log.Printf("failed to read cached resume pdf: %v", err)
-			http.Error(w, "Failed to read resume PDF cache", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		log.Print("Generating resume pdf")
-		filePath, err := latex.GenerateFromResume(resume)
-		if err != nil {
-			log.Printf("failed to generate resume tex file: %v", err)
-			http.Error(w, "Failed to prepare resume PDF", http.StatusInternalServerError)
-			return
-		}
-
-		tempDir := filepath.Dir(filePath)
-		defer func() {
-			if tempDir != "" {
-				if removeErr := os.RemoveAll(tempDir); removeErr != nil {
-					log.Printf("failed to remove temporary resume dir: %v", removeErr)
-				}
-			}
-		}()
-
-		pdfBytes, err = latex.ConvertToPDF(filePath)
-		if err != nil {
-			log.Printf("failed to convert resume tex to pdf: %v", err)
-			http.Error(w, "Failed to generate resume PDF", http.StatusInternalServerError)
-			return
-		}
-		if err := os.MkdirAll(cachePath, 0755); err != nil {
-			log.Printf("failed to create resume cache dir: %v", err)
-		} else if err := os.WriteFile(cachedHashPath, pdfBytes, 0644); err != nil {
-			log.Printf("failed to write resume cache file: %v", err)
-		}
-	}
-	if err := CleanUpOldCacheFiles(cachePath, 24*time.Hour); err != nil {
-		log.Printf("failed to cleanup old resume cache files: %v", err)
+	pdfBytes, err := h.getOrGenerateResumePDF(resume)
+	if err != nil {
+		log.Printf("failed to get or generate resume pdf: %v", err)
+		http.Error(w, "Failed to generate resume PDF", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/pdf")
@@ -302,24 +299,141 @@ func DownloadResume(w http.ResponseWriter, resume *model.Resume) {
 	}
 }
 
-func ResumeHash(resume *model.Resume) (string, error) {
-	data, err := json.Marshal(resume)
-	if err != nil {
-		return "", err
+func (h *ResumeHandler) triggerAsyncResumePDFGeneration(resume *model.Resume) {
+	if resume == nil || resume.ResumeID == "" {
+		return
 	}
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
+
+	resumeCopy := *resume
+	go func() {
+		if err := h.generateResumePDFWithInflight(&resumeCopy); err != nil {
+			log.Printf("failed async resume pdf generation for resumeID=%s: %v", resumeCopy.ResumeID, err)
+		}
+	}()
 }
 
-func CleanUpOldCacheFiles(cacheDir string, maxAge time.Duration) error {
-	now := time.Now()
-	return filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+func (h *ResumeHandler) getOrGenerateResumePDF(resume *model.Resume) ([]byte, error) {
+	cacheFilePath := h.resumeCacheFilePath(resume.ResumeID)
+
+	pdfBytes, err := os.ReadFile(cacheFilePath)
+	if err == nil {
+		return pdfBytes, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+
+	generation, owner := h.registerInflightGeneration(resume.ResumeID)
+	if owner {
+		generation.err = h.generateResumePDF(resume)
+		h.completeInflightGeneration(resume.ResumeID)
+	} else {
+		<-generation.done
+	}
+
+	if generation.err != nil {
+		return nil, generation.err
+	}
+
+	return os.ReadFile(cacheFilePath)
+}
+
+func (h *ResumeHandler) generateResumePDFWithInflight(resume *model.Resume) error {
+	for {
+		generation, owner := h.registerInflightGeneration(resume.ResumeID)
+		if owner {
+			generation.err = h.generateResumePDF(resume)
+			h.completeInflightGeneration(resume.ResumeID)
+			return generation.err
 		}
-		if !info.IsDir() && now.Sub(info.ModTime()) > maxAge {
-			return os.Remove(path)
+
+		<-generation.done
+	}
+}
+
+func (h *ResumeHandler) generateResumePDF(resume *model.Resume) error {
+	cacheDir := h.getCacheDir()
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return err
+	}
+
+	generateFromResume := h.GenerateFromResume
+	if generateFromResume == nil {
+		generateFromResume = latex.GenerateFromResume
+	}
+	convertToPDF := h.ConvertToPDF
+	if convertToPDF == nil {
+		convertToPDF = latex.ConvertToPDF
+	}
+
+	filePath, err := generateFromResume(resume)
+	if err != nil {
+		return err
+	}
+	tempDir := filepath.Dir(filePath)
+	defer func() {
+		if tempDir != "" {
+			if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+				log.Printf("failed to remove temporary resume dir: %v", removeErr)
+			}
 		}
-		return nil
-	})
+	}()
+
+	pdfBytes, err := convertToPDF(filePath)
+	if err != nil {
+		return err
+	}
+
+	cacheFilePath := h.resumeCacheFilePath(resume.ResumeID)
+	tempCacheFilePath := cacheFilePath + ".tmp"
+	if err := os.WriteFile(tempCacheFilePath, pdfBytes, 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(tempCacheFilePath, cacheFilePath); err != nil {
+		_ = os.Remove(tempCacheFilePath)
+		return err
+	}
+
+	return nil
+}
+
+func (h *ResumeHandler) registerInflightGeneration(resumeID string) (*resumePDFGeneration, bool) {
+	h.inflightMu.Lock()
+	defer h.inflightMu.Unlock()
+
+	if h.inflightPDF == nil {
+		h.inflightPDF = make(map[string]*resumePDFGeneration)
+	}
+
+	if generation, exists := h.inflightPDF[resumeID]; exists {
+		return generation, false
+	}
+
+	generation := &resumePDFGeneration{done: make(chan struct{})}
+	h.inflightPDF[resumeID] = generation
+	return generation, true
+}
+
+func (h *ResumeHandler) completeInflightGeneration(resumeID string) {
+	h.inflightMu.Lock()
+	generation, exists := h.inflightPDF[resumeID]
+	if exists {
+		delete(h.inflightPDF, resumeID)
+	}
+	h.inflightMu.Unlock()
+
+	if exists {
+		close(generation.done)
+	}
+}
+
+func (h *ResumeHandler) resumeCacheFilePath(resumeID string) string {
+	return filepath.Join(h.getCacheDir(), resumeID+".pdf")
+}
+
+func (h *ResumeHandler) getCacheDir() string {
+	if h.CacheDir != "" {
+		return h.CacheDir
+	}
+	return getResumeCacheDir()
 }

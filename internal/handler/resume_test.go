@@ -6,6 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
@@ -18,6 +21,12 @@ func createTestResumeHandler(mockRepo *MockResumeRepository) *ResumeHandler {
 		GetUserID: testutil.MockGetUserID,
 		EncodeID:  testutil.MockEncodeID,
 		DecodeID:  testutil.MockDecodeID,
+		GenerateFromResume: func(resume *model.Resume) (string, error) {
+			return "/tmp/resume-test/resume.tex", nil
+		},
+		ConvertToPDF: func(filePath string) ([]byte, error) {
+			return []byte("test-pdf"), nil
+		},
 	}
 }
 
@@ -441,5 +450,94 @@ func TestDownloadResumePDF_InvalidJSON(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_MissingResumeID(t *testing.T) {
+	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler.CacheDir = t.TempDir()
+	req := testutil.CreateRequestWithBody("POST", "/download", `{}`, "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_StartsGenerationOnCacheMiss(t *testing.T) {
+	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler.CacheDir = t.TempDir()
+
+	var generationCount int32
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		atomic.AddInt32(&generationCount, 1)
+		tempDir := t.TempDir()
+		return filepath.Join(tempDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return []byte("generated-pdf"), nil
+	}
+
+	req := testutil.CreateRequestWithBody("POST", "/download", testutil.MockResumeJSON(), "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if atomic.LoadInt32(&generationCount) != 1 {
+		t.Errorf("Expected generation count 1, got %d", atomic.LoadInt32(&generationCount))
+	}
+
+	cachedFilePath := filepath.Join(handler.CacheDir, "decoded.pdf")
+	if _, err := os.Stat(cachedFilePath); err != nil {
+		t.Errorf("Expected cached PDF at %s, stat error: %v", cachedFilePath, err)
+	}
+}
+
+func TestDownloadDefaultResumePDF_UsesCachedResume(t *testing.T) {
+	defaultResume := testutil.MockResume()
+	defaultResume.ResumeID = "decoded"
+
+	mockRepo := &MockResumeRepository{
+		GetDefaultResumeFunc: func(ctx context.Context) (*model.Resume, error) {
+			return defaultResume, nil
+		},
+	}
+
+	handler := createTestResumeHandler(mockRepo)
+	handler.CacheDir = t.TempDir()
+
+	cachedFilePath := filepath.Join(handler.CacheDir, "decoded.pdf")
+	if err := os.WriteFile(cachedFilePath, []byte("cached-pdf"), 0644); err != nil {
+		t.Fatalf("Failed to write cached PDF: %v", err)
+	}
+
+	var generationCount int32
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		atomic.AddInt32(&generationCount, 1)
+		tempDir := t.TempDir()
+		return filepath.Join(tempDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return []byte("generated-pdf"), nil
+	}
+
+	req := testutil.CreateRequestWithUserID("GET", "/download/default", "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadDefaultResumePDF(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if atomic.LoadInt32(&generationCount) != 0 {
+		t.Errorf("Expected generation count 0, got %d", atomic.LoadInt32(&generationCount))
+	}
+	if got := w.Body.String(); got != "cached-pdf" {
+		t.Errorf("Expected cached PDF response, got %q", got)
 	}
 }

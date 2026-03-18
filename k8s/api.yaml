@@ -48,6 +48,8 @@ spec:
               value: "/tmp/texmf-cache"
             - name: TEXMFVAR
               value: "/tmp/texmf-cache"
+            - name: RESUME_CACHE_PATH
+              value: "/mnt/resume-cache"
             - name: AUTH0_AUDIENCE
               valueFrom:
                 configMapKeyRef:
@@ -115,6 +117,8 @@ spec:
               readOnly: true
             - name: tex-cache
               mountPath: "/tmp/texmf-cache"
+            - name: resume-cache-gcs
+              mountPath: "/mnt/resume-cache"
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:buster
           command:
@@ -153,3 +157,8 @@ spec:
         - name: tex-cache
           emptyDir:
             sizeLimit: "256Mi"
+        - name: resume-cache-gcs
+          csi:
+            driver: gcs.csi.gke.io
+            volumeAttributes:
+              bucketName: "dfloo-profile-resume-cache"
