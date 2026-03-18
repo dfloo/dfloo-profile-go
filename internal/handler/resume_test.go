@@ -6,18 +6,32 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/testutil"
 )
 
-func createTestResumeHandler(mockRepo *MockResumeRepository) *ResumeHandler {
+func createTestResumeHandler(t *testing.T, mockRepo *MockResumeRepository) *ResumeHandler {
+	t.Helper()
+	cacheDir := t.TempDir()
+	texDir := t.TempDir()
+
 	return &ResumeHandler{
 		Repo:      mockRepo,
 		GetUserID: testutil.MockGetUserID,
 		EncodeID:  testutil.MockEncodeID,
 		DecodeID:  testutil.MockDecodeID,
+		CacheDir:  cacheDir,
+		GenerateFromResume: func(resume *model.Resume) (string, error) {
+			return filepath.Join(texDir, "resume.tex"), nil
+		},
+		ConvertToPDF: func(filePath string) ([]byte, error) {
+			return []byte("test-pdf"), nil
+		},
 	}
 }
 
@@ -79,7 +93,7 @@ func TestGetUserResumes_Success(t *testing.T) {
 		},
 	}
 
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithUserID("GET", "/resumes", "test")
 	w := httptest.NewRecorder()
 
@@ -109,7 +123,7 @@ func TestGetUserResumes_Success(t *testing.T) {
 }
 
 func TestGetUserResumes_NoUserID(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithUserID("GET", "/resumes", "")
 	w := httptest.NewRecorder()
 
@@ -127,7 +141,7 @@ func TestGetUserResumes_NotFound(t *testing.T) {
 		},
 	}
 
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithUserID("GET", "/resumes", "test")
 	w := httptest.NewRecorder()
 
@@ -148,7 +162,7 @@ func TestPostResume_Success(t *testing.T) {
 	}
 
 	resumeJSON := testutil.MockResumeJSON()
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithBody("POST", "/resumes", resumeJSON, "test")
 	w := httptest.NewRecorder()
 
@@ -174,7 +188,7 @@ func TestPostResume_Success(t *testing.T) {
 }
 
 func TestPostResume_NoUserID(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithBody("POST", "/resumes", "{}", "")
 	w := httptest.NewRecorder()
 
@@ -186,7 +200,7 @@ func TestPostResume_NoUserID(t *testing.T) {
 }
 
 func TestPostResume_InvalidJSON(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithBody("POST", "/resumes", "invalid json", "test")
 	w := httptest.NewRecorder()
 
@@ -204,7 +218,7 @@ func TestPostResume_RepositoryError(t *testing.T) {
 		},
 	}
 
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithBody("POST", "/resumes", "{}", "test")
 	w := httptest.NewRecorder()
 
@@ -223,7 +237,7 @@ func TestPutResume_Success(t *testing.T) {
 	}
 
 	resumeJSON := testutil.MockResumeJSON()
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithBody("PUT", "/resumes", resumeJSON, "test")
 	w := httptest.NewRecorder()
 
@@ -245,7 +259,7 @@ func TestPutResume_Success(t *testing.T) {
 }
 
 func TestPutResume_NoUserID(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithBody("PUT", "/resumes", "{}", "")
 	w := httptest.NewRecorder()
 
@@ -257,7 +271,7 @@ func TestPutResume_NoUserID(t *testing.T) {
 }
 
 func TestPutResume_InvalidJSON(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithBody("PUT", "/resumes", "invalid json", "test")
 	w := httptest.NewRecorder()
 
@@ -269,7 +283,7 @@ func TestPutResume_InvalidJSON(t *testing.T) {
 }
 
 func TestPutResume_DecodeError(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 
 	resumeJSON := `{"resumeId": "invalid"}`
 	req := testutil.CreateRequestWithBody("PUT", "/resumes", resumeJSON, "test")
@@ -289,7 +303,7 @@ func TestPutResume_RepositoryError(t *testing.T) {
 		},
 	}
 
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 
 	resumeJSON := testutil.MockResumeJSON()
 	req := testutil.CreateRequestWithBody("PUT", "/resumes", resumeJSON, "test")
@@ -314,7 +328,7 @@ func TestDeleteResumes_Success(t *testing.T) {
 	}
 
 	resumeIDsJSON := `["resume1", "resume2"]`
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithBody("DELETE", "/resumes", resumeIDsJSON, "test")
 	w := httptest.NewRecorder()
 
@@ -341,6 +355,38 @@ func TestDeleteResumes_Success(t *testing.T) {
 	}
 }
 
+func TestDeleteResumes_RemovesCacheFiles(t *testing.T) {
+	deletedDecodedID := "decoded"
+
+	mockRepo := &MockResumeRepository{
+		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) ([]string, error) {
+			if len(resumeIDs) != 1 || resumeIDs[0] != deletedDecodedID {
+				return nil, errors.New("unexpected resume IDs")
+			}
+			return resumeIDs, nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+	cacheFilePath := handler.resumeCacheFilePath(deletedDecodedID)
+	if err := os.WriteFile(cacheFilePath, []byte("cached-pdf"), 0644); err != nil {
+		t.Fatalf("Failed to write cache file: %v", err)
+	}
+
+	req := testutil.CreateRequestWithBody("DELETE", "/resumes", `["resume1"]`, "test")
+	w := httptest.NewRecorder()
+
+	handler.DeleteResumes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	if _, err := os.Stat(cacheFilePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Expected cache file to be removed, stat err=%v", err)
+	}
+}
+
 func TestDeleteResumes_PartialSuccess(t *testing.T) {
 	mockRepo := &MockResumeRepository{
 		DeleteResumesFunc: func(ctx context.Context, resumeIDs []string, userID string) ([]string, error) {
@@ -352,7 +398,16 @@ func TestDeleteResumes_PartialSuccess(t *testing.T) {
 	}
 
 	resumeIDsJSON := `["resume1", "resume2"]`
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
+	deletedCacheFilePath := handler.resumeCacheFilePath("decoded")
+	if err := os.WriteFile(deletedCacheFilePath, []byte("cached-pdf"), 0644); err != nil {
+		t.Fatalf("Failed to write deleted cache file: %v", err)
+	}
+	notDeletedDecodedID := "other-resume"
+	notDeletedCacheFilePath := handler.resumeCacheFilePath(notDeletedDecodedID)
+	if err := os.WriteFile(notDeletedCacheFilePath, []byte("cached-pdf"), 0644); err != nil {
+		t.Fatalf("Failed to write non-deleted cache file: %v", err)
+	}
 	req := testutil.CreateRequestWithBody("DELETE", "/resumes", resumeIDsJSON, "test")
 	w := httptest.NewRecorder()
 
@@ -375,10 +430,18 @@ func TestDeleteResumes_PartialSuccess(t *testing.T) {
 	if deletedIDs[0] != "encoded" {
 		t.Errorf("Expected ID 'encoded', got '%s'", deletedIDs[0])
 	}
+
+	if _, err := os.Stat(deletedCacheFilePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Expected deleted cache file to be removed, stat err=%v", err)
+	}
+
+	if _, err := os.Stat(notDeletedCacheFilePath); err != nil {
+		t.Fatalf("Expected non-deleted cache file to remain, stat err=%v", err)
+	}
 }
 
 func TestDeleteResumes_NoUserID(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithBody("DELETE", "/resumes", `["resume1"]`, "")
 	w := httptest.NewRecorder()
 
@@ -390,7 +453,7 @@ func TestDeleteResumes_NoUserID(t *testing.T) {
 }
 
 func TestDeleteResumes_InvalidJSON(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	req := testutil.CreateRequestWithBody("DELETE", "/resumes", "invalid json", "test")
 	w := httptest.NewRecorder()
 
@@ -402,7 +465,7 @@ func TestDeleteResumes_InvalidJSON(t *testing.T) {
 }
 
 func TestDeleteResumes_DecodeError(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
 
 	req := testutil.CreateRequestWithBody("DELETE", "/resumes", `["invalid"]`, "test")
 	w := httptest.NewRecorder()
@@ -421,7 +484,7 @@ func TestDeleteResumes_RepositoryError(t *testing.T) {
 		},
 	}
 
-	handler := createTestResumeHandler(mockRepo)
+	handler := createTestResumeHandler(t, mockRepo)
 	req := testutil.CreateRequestWithBody("DELETE", "/resumes", `["resume1"]`, "test")
 	w := httptest.NewRecorder()
 
@@ -432,14 +495,167 @@ func TestDeleteResumes_RepositoryError(t *testing.T) {
 	}
 }
 
-func TestDownloadResumePDF_InvalidJSON(t *testing.T) {
-	handler := createTestResumeHandler(&MockResumeRepository{})
-	req := testutil.CreateRequestWithBody("POST", "/download", "invalid json", "")
+func TestDownloadResumePDF_NoUserID(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	req := testutil.CreateRequestWithUserID("GET", "/download/encoded", "")
+	req.SetPathValue("resumeId", "encoded")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_MissingResumeID(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	handler.CacheDir = t.TempDir()
+	req := testutil.CreateRequestWithUserID("GET", "/download", "test")
 	w := httptest.NewRecorder()
 
 	handler.DownloadResumePDF(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_DecodeError(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	req := testutil.CreateRequestWithUserID("GET", "/download/invalid", "test")
+	req.SetPathValue("resumeId", "invalid")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_ResumeNotFound(t *testing.T) {
+	mockRepo := &MockResumeRepository{
+		GetResumeByIDFunc: func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
+			return nil, errors.New("not found")
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+	req := testutil.CreateRequestWithUserID("GET", "/download/encoded", "test")
+	req.SetPathValue("resumeId", "encoded")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestDownloadResumePDF_StartsGenerationOnCacheMiss(t *testing.T) {
+	mockRepo := &MockResumeRepository{
+		GetResumeByIDFunc: func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
+			if userID != "test" {
+				t.Fatalf("Expected userID test, got %s", userID)
+			}
+			if resumeID != "decoded" {
+				t.Fatalf("Expected resumeID decoded, got %s", resumeID)
+			}
+			resume := testutil.MockResume()
+			resume.ResumeID = resumeID
+			return resume, nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+	handler.CacheDir = t.TempDir()
+
+	var generationCount int32
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		atomic.AddInt32(&generationCount, 1)
+		tempDir := t.TempDir()
+		return filepath.Join(tempDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return []byte("generated-pdf"), nil
+	}
+
+	req := testutil.CreateRequestWithUserID("GET", "/download/encoded", "test")
+	req.SetPathValue("resumeId", "encoded")
+	w := httptest.NewRecorder()
+
+	handler.DownloadResumePDF(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if atomic.LoadInt32(&generationCount) != 1 {
+		t.Errorf("Expected generation count 1, got %d", atomic.LoadInt32(&generationCount))
+	}
+
+	cachedFilePath := handler.resumeCacheFilePath("decoded")
+	if _, err := os.Stat(cachedFilePath); err != nil {
+		t.Errorf("Expected cached PDF at %s, stat error: %v", cachedFilePath, err)
+	}
+}
+
+func TestDownloadDefaultResumePDF_UsesCachedResume(t *testing.T) {
+	defaultResume := testutil.MockResume()
+	defaultResume.ResumeID = "decoded"
+
+	mockRepo := &MockResumeRepository{
+		GetDefaultResumeFunc: func(ctx context.Context) (*model.Resume, error) {
+			return defaultResume, nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+	handler.CacheDir = t.TempDir()
+
+	cachedFilePath := handler.resumeCacheFilePath("decoded")
+	if err := os.WriteFile(cachedFilePath, []byte("cached-pdf"), 0644); err != nil {
+		t.Fatalf("Failed to write cached PDF: %v", err)
+	}
+
+	var generationCount int32
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		atomic.AddInt32(&generationCount, 1)
+		tempDir := t.TempDir()
+		return filepath.Join(tempDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return []byte("generated-pdf"), nil
+	}
+
+	req := testutil.CreateRequestWithUserID("GET", "/download/default", "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadDefaultResumePDF(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if atomic.LoadInt32(&generationCount) != 0 {
+		t.Errorf("Expected generation count 0, got %d", atomic.LoadInt32(&generationCount))
+	}
+	if got := w.Body.String(); got != "cached-pdf" {
+		t.Errorf("Expected cached PDF response, got %q", got)
+	}
+}
+
+func TestResumeCacheFilePath_SanitizesResumeID(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	handler.CacheDir = t.TempDir()
+
+	cacheFilePath := handler.resumeCacheFilePath("../outside/evil")
+
+	if filepath.Dir(cacheFilePath) != handler.CacheDir {
+		t.Fatalf("Expected cache file to stay in cache dir, got %s", cacheFilePath)
+	}
+
+	base := filepath.Base(cacheFilePath)
+	if len(base) != 68 || filepath.Ext(base) != ".pdf" {
+		t.Fatalf("Expected hashed pdf filename, got %s", base)
 	}
 }
