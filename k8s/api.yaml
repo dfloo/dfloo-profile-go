@@ -159,6 +159,6 @@ spec:
             sizeLimit: "256Mi"
         - name: resume-cache-gcs
           csi:
-            driver: gcs.csi.gke.io
+            driver: gcsfuse.csi.storage.gke.io
             volumeAttributes:
               bucketName: "dfloo-profile-resume-cache"
