@@ -38,9 +38,9 @@ resource "google_service_account" "ksa_gsa" {
 }
 
 resource "google_service_account" "cloudbuild_gsa" {
-    project = var.project_id
-    account_id = var.cloudbuild_service_account_name
-    display_name = "Cloudbuild Google Service Account"
+  project      = var.project_id
+  account_id   = var.cloudbuild_service_account_name
+  display_name = "Cloudbuild Google Service Account"
 }
 
 resource "google_service_account_iam_member" "ksa_workload_identity_binding" {
@@ -130,6 +130,19 @@ resource "google_project_iam_member" "cloudbuild_container_admin" {
 resource "google_compute_global_address" "api_static_ip" {
   name    = "api-static-ip"
   project = var.project_id
+}
+
+resource "google_storage_bucket" "resume_cache" {
+  name                        = "dfloo-profile-resume-cache"
+  project                     = var.project_id
+  location                    = var.region
+  uniform_bucket_level_access = true
+}
+
+resource "google_storage_bucket_iam_member" "resume_cache_object_admin" {
+  bucket = google_storage_bucket.resume_cache.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.ksa_gsa.email}"
 }
 
 resource "google_container_cluster" "autopilot_cluster" {
