@@ -644,6 +644,80 @@ func TestDownloadDefaultResumePDF_UsesCachedResume(t *testing.T) {
 	}
 }
 
+func TestDownloadGuestResumePDF_Success(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	texDir := t.TempDir()
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		return filepath.Join(texDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return []byte("guest-pdf"), nil
+	}
+
+	req := testutil.CreateRequestWithBody("POST", "/download/resume", testutil.MockResumeJSON(), "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadGuestResumePDF(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("Expected Content-Type application/pdf, got %s", ct)
+	}
+	if got := w.Body.String(); got != "guest-pdf" {
+		t.Errorf("Expected body 'guest-pdf', got %q", got)
+	}
+}
+
+func TestDownloadGuestResumePDF_InvalidJSON(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	req := testutil.CreateRequestWithBody("POST", "/download/resume", "invalid json", "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadGuestResumePDF(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestDownloadGuestResumePDF_GenerateError(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		return "", errors.New("latex generation failed")
+	}
+
+	req := testutil.CreateRequestWithBody("POST", "/download/resume", testutil.MockResumeJSON(), "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadGuestResumePDF(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+func TestDownloadGuestResumePDF_ConvertError(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	texDir := t.TempDir()
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		return filepath.Join(texDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return nil, errors.New("pdf conversion failed")
+	}
+
+	req := testutil.CreateRequestWithBody("POST", "/download/resume", testutil.MockResumeJSON(), "")
+	w := httptest.NewRecorder()
+
+	handler.DownloadGuestResumePDF(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
 func TestResumeCacheFilePath_SanitizesResumeID(t *testing.T) {
 	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	handler.CacheDir = t.TempDir()

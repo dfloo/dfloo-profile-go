@@ -252,6 +252,51 @@ func (h *ResumeHandler) DeleteResumes(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(deletedIDs)
 }
 
+func (h *ResumeHandler) DownloadGuestResumePDF(w http.ResponseWriter, r *http.Request) {
+	var resume model.Resume
+	if err := json.NewDecoder(r.Body).Decode(&resume); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	generateFromResume := h.GenerateFromResume
+	if generateFromResume == nil {
+		generateFromResume = latex.GenerateFromResume
+	}
+	convertToPDF := h.ConvertToPDF
+	if convertToPDF == nil {
+		convertToPDF = latex.ConvertToPDF
+	}
+
+	filePath, err := generateFromResume(&resume)
+	if err != nil {
+		log.Printf("failed to generate latex for guest resume: %v", err)
+		http.Error(w, "Failed to generate resume PDF", http.StatusInternalServerError)
+		return
+	}
+	defer func() {
+		if tempDir := filepath.Dir(filePath); tempDir != "" {
+			if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+				log.Printf("failed to remove temporary resume dir: %v", removeErr)
+			}
+		}
+	}()
+
+	pdfBytes, err := convertToPDF(filePath)
+	if err != nil {
+		log.Printf("failed to convert latex to pdf for guest resume: %v", err)
+		http.Error(w, "Failed to generate resume PDF", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename=resume.pdf")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(pdfBytes); err != nil {
+		log.Printf("failed to write guest resume pdf response: %v", err)
+	}
+}
+
 func (h *ResumeHandler) DownloadDefaultResumePDF(w http.ResponseWriter, r *http.Request) {
 	resume, err := h.Repo.GetDefaultResume(r.Context())
 	if err != nil {
