@@ -61,6 +61,12 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
+	mux.HandleFunc("/api/resumes/download/{resumeId}", func(w http.ResponseWriter, r *http.Request) {
+		middleware.CoreAuthenticated(
+			http.HandlerFunc(resumeHandler.DownloadResumePDF),
+		).ServeHTTP(w, r)
+	})
+
 	mux.HandleFunc("/api/resumes/default", func(w http.ResponseWriter, r *http.Request) {
 		middleware.CoreAuthenticated(
 			http.HandlerFunc(resumeHandler.SetDefaultResume),
@@ -73,9 +79,9 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
-	mux.HandleFunc("/api/resumes/download/{resumeId}", func(w http.ResponseWriter, r *http.Request) {
-		middleware.CoreAuthenticated(
-			http.HandlerFunc(resumeHandler.DownloadResumePDF),
+	mux.HandleFunc("/api/download/resume", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(resumeHandler.DownloadGuestResumePDF),
 		).ServeHTTP(w, r)
 	})
 
