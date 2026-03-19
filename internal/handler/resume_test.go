@@ -20,7 +20,7 @@ func createTestResumeHandler(t *testing.T, mockRepo *MockResumeRepository) *Resu
 	cacheDir := t.TempDir()
 	texDir := t.TempDir()
 
-	return &ResumeHandler{
+	h := &ResumeHandler{
 		Repo:      mockRepo,
 		GetUserID: testutil.MockGetUserID,
 		EncodeID:  testutil.MockEncodeID,
@@ -33,6 +33,8 @@ func createTestResumeHandler(t *testing.T, mockRepo *MockResumeRepository) *Resu
 			return []byte("test-pdf"), nil
 		},
 	}
+	t.Cleanup(h.asyncWg.Wait)
+	return h
 }
 
 type MockResumeRepository struct {
