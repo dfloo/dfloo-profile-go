@@ -27,6 +27,8 @@ spec:
       app: dfloo-profile-api
   template:
     metadata:
+      annotations:
+        gke-gcsfuse/volumes: "true"
       labels:
         app: dfloo-profile-api
     spec:
@@ -159,6 +161,6 @@ spec:
             sizeLimit: "256Mi"
         - name: resume-cache-gcs
           csi:
-            driver: gcs.csi.gke.io
+            driver: gcsfuse.csi.storage.gke.io
             volumeAttributes:
               bucketName: "dfloo-profile-resume-cache"
