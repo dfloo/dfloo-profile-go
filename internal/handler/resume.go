@@ -32,6 +32,7 @@ type ResumeHandler struct {
 
 	inflightMu  sync.Mutex
 	inflightPDF map[string]*resumePDFGeneration
+	asyncWg     sync.WaitGroup
 }
 
 type resumePDFGeneration struct {
@@ -362,7 +363,9 @@ func (h *ResumeHandler) triggerAsyncResumePDFGeneration(resume *model.Resume) {
 	}
 
 	resumeCopy := *resume
+	h.asyncWg.Add(1)
 	go func() {
+		defer h.asyncWg.Done()
 		if err := h.generateResumePDFWithInflight(&resumeCopy); err != nil {
 			log.Printf("failed async resume pdf generation for resumeID=%s: %v", resumeCopy.ResumeID, err)
 		}
