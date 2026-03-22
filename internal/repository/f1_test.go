@@ -1,6 +1,10 @@
 package repository
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/dfloo/dfloo-profile-go/internal/model"
+)
 
 func TestGetConstructorColor_UsesFallbackForUnknown(t *testing.T) {
 	got := getConstructorColor(999999)
@@ -53,5 +57,31 @@ func TestFinalizeChampionshipDrivers_SortsByFinalPointsThenName(t *testing.T) {
 
 	if got[2].Name != "Charles Leclerc" {
 		t.Fatalf("third driver = %q, want %q", got[2].Name, "Charles Leclerc")
+	}
+}
+
+func TestFinalizeConstructorStandings_SortsByPointsThenName(t *testing.T) {
+	input := []model.F1ConstructorStanding{
+		{ID: "6", Name: "Ferrari", Color: "#FF8700", LatestPoints: 652},
+		{ID: "9", Name: "Red Bull", Color: "#3671C6", LatestPoints: 860},
+		{ID: "117", Name: "Aston Martin", Color: "#52E252", LatestPoints: 652},
+	}
+
+	got := finalizeConstructorStandings(input)
+
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3", len(got))
+	}
+
+	if got[0].Name != "Red Bull" {
+		t.Fatalf("first constructor = %q, want %q", got[0].Name, "Red Bull")
+	}
+
+	if got[1].Name != "Aston Martin" {
+		t.Fatalf("second constructor = %q, want %q", got[1].Name, "Aston Martin")
+	}
+
+	if got[2].Name != "Ferrari" {
+		t.Fatalf("third constructor = %q, want %q", got[2].Name, "Ferrari")
 	}
 }

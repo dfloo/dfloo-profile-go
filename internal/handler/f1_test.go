@@ -16,6 +16,7 @@ type MockF1Repository struct {
 	GetAvailableYearsFunc   func(ctx context.Context) ([]int, error)
 	GetChampionshipByYearFn func(ctx context.Context, year int) (*model.F1ChampionshipData, error)
 	GetDriversByYearFn      func(ctx context.Context, year int) ([]model.F1DriverStanding, error)
+	GetConstructorsByYearFn func(ctx context.Context, year int) ([]model.F1ConstructorStanding, error)
 }
 
 func (m *MockF1Repository) GetAvailableYears(ctx context.Context) ([]int, error) {
@@ -43,6 +44,16 @@ func (m *MockF1Repository) GetDriversByYear(
 		return m.GetDriversByYearFn(ctx, year)
 	}
 	return nil, errors.New("GetDriversByYear not implemented in mock")
+}
+
+func (m *MockF1Repository) GetConstructorsByYear(
+	ctx context.Context,
+	year int,
+) ([]model.F1ConstructorStanding, error) {
+	if m.GetConstructorsByYearFn != nil {
+		return m.GetConstructorsByYearFn(ctx, year)
+	}
+	return nil, errors.New("GetConstructorsByYear not implemented in mock")
 }
 
 func TestGetChampionships_DefaultLatestYearSuccess(t *testing.T) {
@@ -286,6 +297,123 @@ func TestGetDrivers_InternalFailure(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.GetDrivers(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Internal server error.")
+}
+
+func TestGetConstructors_MissingYear(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/constructors", nil)
+	w := httptest.NewRecorder()
+
+	h.GetConstructors(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Missing year query parameter.")
+}
+
+func TestGetConstructors_InvalidYearFormat_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/constructors?year=abc", nil)
+	w := httptest.NewRecorder()
+
+	h.GetConstructors(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid year format.")
+}
+
+func TestGetConstructors_Success(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024, 2023}, nil
+		},
+		GetConstructorsByYearFn: func(ctx context.Context, year int) ([]model.F1ConstructorStanding, error) {
+			if year != 2024 {
+				t.Fatalf("year = %d, want %d", year, 2024)
+			}
+			return []model.F1ConstructorStanding{
+				{ID: "9", Name: "Red Bull", Color: "#3671C6", LatestPoints: 860},
+				{ID: "6", Name: "Ferrari", Color: "#FF8700", LatestPoints: 652},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/constructors?year=2024", nil)
+	w := httptest.NewRecorder()
+
+	h.GetConstructors(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var got model.F1ConstructorsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if got.Data.Year != 2024 {
+		t.Fatalf("data.year = %d, want %d", got.Data.Year, 2024)
+	}
+	if len(got.Data.Constructors) != 2 {
+		t.Fatalf("constructors length = %d, want 2", len(got.Data.Constructors))
+	}
+}
+
+func TestGetConstructors_UnsupportedYear(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+		GetConstructorsByYearFn: func(ctx context.Context, year int) ([]model.F1ConstructorStanding, error) {
+			return nil, repository.ErrF1YearNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/constructors?year=1999", nil)
+	w := httptest.NewRecorder()
+
+	h.GetConstructors(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Unsupported championship year.")
+}
+
+func TestGetConstructors_InternalFailure(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/constructors?year=2024", nil)
+	w := httptest.NewRecorder()
+
+	h.GetConstructors(w, req)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)

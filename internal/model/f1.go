@@ -47,6 +47,23 @@ type F1DriverStanding struct {
 	LatestPoints float64 `json:"latestPoints"`
 }
 
+type F1ConstructorsResponse struct {
+	AvailableYears []int              `json:"availableYears"`
+	Data           F1ConstructorsData `json:"data"`
+}
+
+type F1ConstructorsData struct {
+	Year         int                     `json:"year"`
+	Constructors []F1ConstructorStanding `json:"constructors"`
+}
+
+type F1ConstructorStanding struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Color        string  `json:"color"`
+	LatestPoints float64 `json:"latestPoints"`
+}
+
 type APIErrorResponse struct {
 	Message string `json:"message"`
 }

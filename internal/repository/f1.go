@@ -34,6 +34,7 @@ type F1Repository interface {
 	GetAvailableYears(ctx context.Context) ([]int, error)
 	GetChampionshipByYear(ctx context.Context, year int) (*model.F1ChampionshipData, error)
 	GetDriversByYear(ctx context.Context, year int) ([]model.F1DriverStanding, error)
+	GetConstructorsByYear(ctx context.Context, year int) ([]model.F1ConstructorStanding, error)
 }
 
 type DBF1Repository struct {
@@ -172,6 +173,61 @@ func (r *DBF1Repository) GetDriversByYear(
 	})
 
 	return drivers, nil
+}
+
+func (r *DBF1Repository) GetConstructorsByYear(
+	ctx context.Context,
+	year int,
+) ([]model.F1ConstructorStanding, error) {
+	if r.Pool == nil {
+		return nil, errors.New("database pool is nil")
+	}
+
+	rows, err := r.Pool.Query(
+		ctx,
+		`SELECT DISTINCT ON (cs.constructor_id)
+			cs.constructor_id,
+			c.name,
+			cs.points
+		 FROM f1_constructor_standings cs
+		 JOIN f1_races r ON r.race_id = cs.race_id
+		 JOIN f1_constructors c ON c.constructor_id = cs.constructor_id
+		 WHERE r.year = $1
+		 ORDER BY cs.constructor_id, r.round DESC`,
+		year,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query constructors by year: %w", err)
+	}
+	defer rows.Close()
+
+	constructors := make([]model.F1ConstructorStanding, 0)
+	for rows.Next() {
+		var constructorID int
+		var name string
+		var points float64
+
+		if scanErr := rows.Scan(&constructorID, &name, &points); scanErr != nil {
+			return nil, fmt.Errorf("scan constructors by year: %w", scanErr)
+		}
+
+		constructors = append(constructors, model.F1ConstructorStanding{
+			ID:           strconv.Itoa(constructorID),
+			Name:         strings.TrimSpace(name),
+			Color:        getConstructorColor(constructorID),
+			LatestPoints: points,
+		})
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("iterate constructors by year: %w", rows.Err())
+	}
+
+	if len(constructors) == 0 {
+		return nil, ErrF1YearNotFound
+	}
+
+	return finalizeConstructorStandings(constructors), nil
 }
 
 func (r *DBF1Repository) getRacesByYear(
@@ -443,4 +499,17 @@ func getConstructorColor(constructorID int) string {
 		return color
 	}
 	return f1FallbackColor
+}
+
+func finalizeConstructorStandings(
+	constructors []model.F1ConstructorStanding,
+) []model.F1ConstructorStanding {
+	sort.SliceStable(constructors, func(i, j int) bool {
+		if constructors[i].LatestPoints == constructors[j].LatestPoints {
+			return constructors[i].Name < constructors[j].Name
+		}
+		return constructors[i].LatestPoints > constructors[j].LatestPoints
+	})
+
+	return constructors
 }

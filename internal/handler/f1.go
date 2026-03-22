@@ -100,6 +100,47 @@ func (h *F1Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *F1Handler) GetConstructors(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	yearParam := r.URL.Query().Get("year")
+	if yearParam == "" {
+		h.writeError(w, http.StatusBadRequest, "Missing year query parameter.")
+		return
+	}
+
+	year, _, statusCode, message := parseOptionalYear(yearParam)
+	if statusCode != 0 {
+		h.writeError(w, statusCode, message)
+		return
+	}
+
+	availableYears, err := h.Repo.GetAvailableYears(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Internal server error.")
+		return
+	}
+
+	constructors, err := h.Repo.GetConstructorsByYear(r.Context(), year)
+	if err != nil {
+		if errors.Is(err, repository.ErrF1YearNotFound) {
+			h.writeError(w, http.StatusNotFound, "Unsupported championship year.")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "Internal server error.")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(model.F1ConstructorsResponse{
+		AvailableYears: availableYears,
+		Data: model.F1ConstructorsData{
+			Year:         year,
+			Constructors: constructors,
+		},
+	})
+}
+
 func parseOptionalYear(yearParam string) (int, bool, int, string) {
 	if yearParam == "" {
 		return 0, false, 0, ""
