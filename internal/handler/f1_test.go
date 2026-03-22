@@ -136,6 +136,25 @@ func TestGetChampionships_InvalidYearFormat(t *testing.T) {
 	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid year format.")
 }
 
+func TestGetChampionships_InvalidYearFormat_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/championships?year=abc", nil)
+	w := httptest.NewRecorder()
+
+	h.GetChampionships(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid year format.")
+}
+
 func TestGetChampionships_UnsupportedYear(t *testing.T) {
 	h := NewF1Handler(&MockF1Repository{
 		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
@@ -175,6 +194,25 @@ func TestGetDrivers_MissingYear(t *testing.T) {
 	}
 
 	assertJSONErrorMessage(t, w.Body.Bytes(), "Missing year query parameter.")
+}
+
+func TestGetDrivers_InvalidYearFormat_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers?year=abc", nil)
+	w := httptest.NewRecorder()
+
+	h.GetDrivers(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid year format.")
 }
 
 func TestGetDrivers_Success(t *testing.T) {

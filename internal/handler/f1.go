@@ -21,16 +21,25 @@ func NewF1Handler(repo repository.F1Repository) *F1Handler {
 func (h *F1Handler) GetChampionships(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	yearParam := r.URL.Query().Get("year")
+	year, hasYear, statusCode, message := parseOptionalYear(yearParam)
+	if statusCode != 0 {
+		h.writeError(w, statusCode, message)
+		return
+	}
+
 	availableYears, err := h.Repo.GetAvailableYears(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Internal server error.")
 		return
 	}
 
-	year, statusCode, message := parseYearWithDefault(r.URL.Query().Get("year"), availableYears)
-	if statusCode != 0 {
-		h.writeError(w, statusCode, message)
-		return
+	if !hasYear {
+		year, statusCode, message = parseDefaultYear(availableYears)
+		if statusCode != 0 {
+			h.writeError(w, statusCode, message)
+			return
+		}
 	}
 
 	championshipData, err := h.Repo.GetChampionshipByYear(r.Context(), year)
@@ -53,21 +62,21 @@ func (h *F1Handler) GetChampionships(w http.ResponseWriter, r *http.Request) {
 func (h *F1Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	availableYears, err := h.Repo.GetAvailableYears(r.Context())
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Internal server error.")
-		return
-	}
-
 	yearParam := r.URL.Query().Get("year")
 	if yearParam == "" {
 		h.writeError(w, http.StatusBadRequest, "Missing year query parameter.")
 		return
 	}
 
-	year, convErr := strconv.Atoi(yearParam)
-	if convErr != nil {
-		h.writeError(w, http.StatusBadRequest, "Invalid year format.")
+	year, _, statusCode, message := parseOptionalYear(yearParam)
+	if statusCode != 0 {
+		h.writeError(w, statusCode, message)
+		return
+	}
+
+	availableYears, err := h.Repo.GetAvailableYears(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Internal server error.")
 		return
 	}
 
@@ -91,15 +100,20 @@ func (h *F1Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func parseYearWithDefault(yearParam string, availableYears []int) (int, int, string) {
-	if yearParam != "" {
-		year, err := strconv.Atoi(yearParam)
-		if err != nil {
-			return 0, http.StatusBadRequest, "Invalid year format."
-		}
-		return year, 0, ""
+func parseOptionalYear(yearParam string) (int, bool, int, string) {
+	if yearParam == "" {
+		return 0, false, 0, ""
 	}
 
+	year, err := strconv.Atoi(yearParam)
+	if err != nil {
+		return 0, false, http.StatusBadRequest, "Invalid year format."
+	}
+
+	return year, true, 0, ""
+}
+
+func parseDefaultYear(availableYears []int) (int, int, string) {
 	if len(availableYears) == 0 {
 		return 0, http.StatusNotFound, "Unsupported championship year."
 	}

@@ -104,8 +104,8 @@ func TestNew_F1DriversHandler(t *testing.T) {
 
 		mux.ServeHTTP(w, req)
 
-		if w.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 		}
 
 		var payload map[string]string

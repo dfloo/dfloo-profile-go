@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -125,16 +126,31 @@ func loadAll(ctx context.Context, pool *pgxpool.Pool, dataDir string) error {
 	}
 	defer conn.Release()
 
+	tx, err := conn.Conn().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin load transaction: %w", err)
+	}
+	defer func() {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			log.Printf("rollback load transaction: %v", rollbackErr)
+		}
+	}()
+
 	for _, spec := range tableSpecs {
-		if err := loadTable(ctx, conn, dataDir, spec); err != nil {
+		if err := loadTable(ctx, tx, dataDir, spec); err != nil {
 			return err
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit load transaction: %w", err)
 	}
 
 	return nil
 }
 
-func loadTable(ctx context.Context, conn *pgxpool.Conn, dataDir string, spec tableSpec) error {
+func loadTable(ctx context.Context, tx pgx.Tx, dataDir string, spec tableSpec) error {
 	csvPath := filepath.Join(dataDir, spec.File)
 	file, err := os.Open(csvPath)
 	if err != nil {
@@ -152,7 +168,7 @@ func loadTable(ctx context.Context, conn *pgxpool.Conn, dataDir string, spec tab
 	)
 
 	start := time.Now()
-	tag, err := conn.Conn().PgConn().CopyFrom(ctx, file, copySQL)
+	tag, err := tx.Conn().PgConn().CopyFrom(ctx, file, copySQL)
 	if err != nil {
 		return fmt.Errorf("copy into %s from %s: %w", spec.Table, csvPath, err)
 	}
