@@ -160,8 +160,7 @@ CREATE TABLE IF NOT EXISTS f1_lap_times (
     position INTEGER NOT NULL,
     lap_time TEXT NOT NULL,
     milliseconds INTEGER NOT NULL,
-    PRIMARY KEY (race_id, driver_id, lap),
-    UNIQUE (race_id, driver_id, lap, position)
+    PRIMARY KEY (race_id, driver_id, lap)
 );
 
 CREATE INDEX IF NOT EXISTS idx_f1_races_circuit_id ON f1_races(circuit_id);

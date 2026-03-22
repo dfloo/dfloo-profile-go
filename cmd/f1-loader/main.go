@@ -90,11 +90,11 @@ func populationState(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	populated := 0
 
 	for _, spec := range tableSpecs {
-		count, err := tableRowCount(ctx, pool, spec.Table)
+		hasRows, err := tableHasRows(ctx, pool, spec.Table)
 		if err != nil {
 			return "", err
 		}
-		if count > 0 {
+		if hasRows {
 			populated++
 		}
 	}
@@ -109,13 +109,13 @@ func populationState(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	}
 }
 
-func tableRowCount(ctx context.Context, pool *pgxpool.Pool, tableName string) (int64, error) {
-	query := fmt.Sprintf("SELECT COUNT(1) FROM %s", tableName)
-	var count int64
-	if err := pool.QueryRow(ctx, query).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count rows in %s: %w", tableName, err)
+func tableHasRows(ctx context.Context, pool *pgxpool.Pool, tableName string) (bool, error) {
+	query := fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM %s LIMIT 1)", tableName)
+	var hasRows bool
+	if err := pool.QueryRow(ctx, query).Scan(&hasRows); err != nil {
+		return false, fmt.Errorf("check rows in %s: %w", tableName, err)
 	}
-	return count, nil
+	return hasRows, nil
 }
 
 func loadAll(ctx context.Context, pool *pgxpool.Pool, dataDir string) error {

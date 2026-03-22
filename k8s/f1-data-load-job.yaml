@@ -17,8 +17,8 @@ spec:
           effect: "NoSchedule"
       containers:
         - name: f1-loader
-          image: us-central1-docker.pkg.dev/dfloo-profile/dfloo-profile-repo/dfloo-profile-go:latest
-          imagePullPolicy: IfNotPresent
+          image: gcr.io/dfloo-profile/dfloo-profile-go:f1-loader-latest
+          imagePullPolicy: Always
           command:
             - "sh"
             - "-c"
@@ -30,7 +30,8 @@ spec:
               export PGHOST="/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}"
               export PGPORT="5432"
 
-              /dfloo-f1-loader --data-dir /db/f1-data && touch /cloudsql/done
+              trap 'touch /cloudsql/done' EXIT
+              /dfloo-f1-loader --data-dir /db/f1-data
           resources:
             requests:
               memory: "256Mi"
