@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: f1-data-load
+  namespace: dfloo-profile
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      automountServiceAccountToken: true
+      serviceAccountName: dfloo-profile-k8s
+      tolerations:
+        - key: "node.gke.io/balloon-pod-resize"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: f1-loader
+          image: gcr.io/dfloo-profile/dfloo-profile-go:f1-loader-latest
+          imagePullPolicy: Always
+          command:
+            - "sh"
+            - "-c"
+            - |
+              export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
+              export PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
+              export PGUSER="$(cat /mnt/secrets-store/postgres-user)"
+              export SQL_INSTANCE_CONNECTION_NAME="$(cat /mnt/secrets-store/sql-instance-connection-name)"
+              export PGHOST="/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}"
+              export PGPORT="5432"
+
+              trap 'touch /cloudsql/done' EXIT
+              /dfloo-f1-loader --data-dir /db/f1-data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: cloudsql-socket
+              mountPath: /cloudsql
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:buster
+          command:
+            - "sh"
+            - "-c"
+            - |
+              /cloud-sql-proxy \
+                --unix-socket=/cloudsql \
+                "$(cat /mnt/secrets-store/sql-instance-connection-name)" &
+
+              while [ ! -f /cloudsql/done ]; do
+                sleep 1
+              done
+              echo "F1 load complete, shutting down proxy."
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - configMapRef:
+                name: app-config
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: cloudsql-socket
+              mountPath: /cloudsql
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: cloudsql-socket
+          emptyDir: {}
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "app-secrets-provider"
+      restartPolicy: OnFailure

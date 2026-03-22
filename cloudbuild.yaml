@@ -3,15 +3,32 @@ substitutions:
   _REGION: us-west1
 
 steps:
-  - id: Build
+  - id: Build-API
     name: gcr.io/cloud-builders/docker
     args:
       - build
       - "--no-cache"
+      - "--target"
+      - "runtime-api"
       - "-t"
       - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
       - "-t"
       - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
+      - "-f"
+      - Dockerfile
+      - "."
+
+  - id: Build-F1-Loader
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "--no-cache"
+      - "--target"
+      - "runtime-loader"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/dfloo-profile-go:f1-loader-$COMMIT_SHA"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/dfloo-profile-go:f1-loader-latest"
       - "-f"
       - Dockerfile
       - "."
@@ -204,6 +221,8 @@ steps:
 images:
   - "gcr.io/$PROJECT_ID/dfloo-profile-go:$COMMIT_SHA"
   - "gcr.io/$PROJECT_ID/dfloo-profile-go:latest"
+  - "gcr.io/$PROJECT_ID/dfloo-profile-go:f1-loader-$COMMIT_SHA"
+  - "gcr.io/$PROJECT_ID/dfloo-profile-go:f1-loader-latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY

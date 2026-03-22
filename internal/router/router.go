@@ -19,6 +19,8 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 	jobApplicationRepo := repository.NewDBJobApplicationRepository(pool)
 	jobApplicationHandler := handler.NewJobApplicationHandler(jobApplicationRepo)
 	healthHandler := handler.NewHealthHandler(pool)
+	f1Repo := repository.NewDBF1Repository(pool)
+	f1Handler := handler.NewF1Handler(f1Repo)
 
 	mux.HandleFunc("GET /health", healthHandler.HealthCheck)
 
@@ -95,6 +97,32 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 					jobApplicationHandler.PostJobApplication(w, r)
 				case http.MethodPut:
 					jobApplicationHandler.PutJobApplications(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/f1/championships", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					f1Handler.GetChampionships(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/f1/drivers", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					f1Handler.GetDrivers(w, r)
 				default:
 					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 				}
