@@ -26,11 +26,11 @@ services:
     restart: always
     shm_size: 128mb
     environment:
-      PGUSER: ${PGUSER}
-      PGPASSWORD: ${PGPASSWORD}
-      PGDATABASE: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      POSTGRES_DB: ${PGDATABASE}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 1m30s
       timeout: 30s
       retries: 5
@@ -53,6 +53,23 @@ services:
     volumes:
      - ./db/migrations:/migrations
     entrypoint: [ "sh", "-c", "migrate -path /migrations -database \"$$DATABASE_URL\" up" ]
+  f1-loader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+     - dfloo-network
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${PGUSER}
+      PGPASSWORD: ${PGPASSWORD}
+      PGDATABASE: ${PGDATABASE}
+    command: ["/dfloo-f1-loader", "--data-dir", "/db/f1-data"]
 
 networks:
   dfloo-network:
