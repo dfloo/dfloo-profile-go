@@ -165,7 +165,7 @@ func TestNew_F1ConstructorsHandler(t *testing.T) {
 	})
 }
 
-func ProtectedDownloadRouteHandlesPreflight(t *testing.T) {
+func TestNew_ProtectedDownloadRouteHandlesPreflight(t *testing.T) {
 	t.Setenv("AUTH0_DOMAIN", "example.auth0.com")
 	t.Setenv("AUTH0_AUDIENCE", "https://api.example.com")
 	t.Setenv("CLIENT_ORIGIN", "http://localhost:3000")
