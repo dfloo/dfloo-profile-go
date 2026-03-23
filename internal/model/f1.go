@@ -7,13 +7,8 @@ type F1ChampionshipsResponse struct {
 
 type F1ChampionshipData struct {
 	Year    int                    `json:"year"`
-	Races   []F1Race               `json:"races"`
+	Events  []F1Event              `json:"events"`
 	Drivers []F1ChampionshipDriver `json:"drivers"`
-}
-
-type F1Race struct {
-	Round int    `json:"round"`
-	Name  string `json:"name"`
 }
 
 type F1ChampionshipDriver struct {

@@ -79,9 +79,9 @@ func TestGetChampionships_DefaultLatestYearSuccess(t *testing.T) {
 
 			return &model.F1ChampionshipData{
 				Year: 2024,
-				Races: []model.F1Race{
-					{Round: 1, Name: "Bahrain GP"},
-					{Round: 2, Name: "Saudi Arabian GP"},
+				Events: []model.F1Event{
+					{RaceID: "1", Round: 1, Name: "Bahrain GP"},
+					{RaceID: "2", Round: 2, Name: "Saudi Arabian GP"},
 				},
 				Drivers: []model.F1ChampionshipDriver{
 					{
@@ -128,7 +128,7 @@ func TestGetChampionships_DefaultLatestYearSuccess(t *testing.T) {
 		t.Fatalf("data.year = %d, want 2024", got.Data.Year)
 	}
 
-	raceCount := len(got.Data.Races)
+	raceCount := len(got.Data.Events)
 	for _, driver := range got.Data.Drivers {
 		if len(driver.CumulativePoints) != raceCount {
 			t.Fatalf("cumulativePoints length = %d, want %d", len(driver.CumulativePoints), raceCount)
