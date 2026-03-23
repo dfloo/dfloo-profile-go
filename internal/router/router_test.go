@@ -129,6 +129,42 @@ func TestNew_F1DriversHandler(t *testing.T) {
 	})
 }
 
+func TestNew_F1DriverDetailsHandler(t *testing.T) {
+	t.Setenv("CLIENT_ORIGIN", "http://localhost:3000")
+
+	mux := New(nil)
+
+	t.Run("GET with missing year returns bad request", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		}
+
+		var payload map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("response body is not valid JSON object: %v", err)
+		}
+		if payload["message"] == "" {
+			t.Fatalf("expected non-empty message field")
+		}
+	})
+
+	t.Run("non-GET methods return method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/f1/drivers/1?year=2024", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+		}
+	})
+}
+
 func TestNew_F1ConstructorsHandler(t *testing.T) {
 	t.Setenv("CLIENT_ORIGIN", "http://localhost:3000")
 

@@ -4,30 +4,36 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrF1YearNotFound = errors.New("f1 year not found")
+var ErrF1DriverNotFound = errors.New("f1 driver not found")
+var ErrF1RaceNotFound = errors.New("f1 race not found")
 
 const f1FallbackColor = "#6B7280"
 
 var constructorColors = map[int]string{
-	1:   "#00D2BE",
+	1:   "#FF8700",
 	3:   "#005AFF",
-	4:   "#DC0000",
-	6:   "#FF8700",
+	4:   "#FFEF00",
+	6:   "#FF2800",
 	9:   "#3671C6",
+	15:  "#01C00E",
 	51:  "#52E252",
-	117: "#B6BABD",
+	117: "#229971",
 	131: "#64C4FF",
-	210: "#6692FF",
-	213: "#229971",
+	210: "#F62039",
+	213: "#0078C1",
 	214: "#B12039",
+	215: "#6C98FF",
 }
 
 type F1Repository interface {
@@ -36,6 +42,7 @@ type F1Repository interface {
 	GetDriversByYear(ctx context.Context, year int) ([]model.F1DriverStanding, error)
 	GetConstructorsByYear(ctx context.Context, year int) ([]model.F1ConstructorStanding, error)
 	GetEventsByYear(ctx context.Context, year int) ([]model.F1Event, error)
+	GetDriverDetails(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error)
 }
 
 type DBF1Repository struct {
@@ -242,6 +249,429 @@ func (r *DBF1Repository) GetEventsByYear(ctx context.Context, year int) ([]model
 	}
 
 	return events, nil
+}
+
+func (r *DBF1Repository) GetDriverDetails(
+	ctx context.Context,
+	driverID int,
+	year int,
+	raceID *int,
+) (*model.DriverDetailData, error) {
+	if r.Pool == nil {
+		return nil, errors.New("database pool is nil")
+	}
+
+	events, raceIDs, raceIndexByID, err := r.getRacesByYear(ctx, year)
+	if err != nil {
+		return nil, err
+	}
+
+	races := make([]model.DriverRaceOption, 0, len(events))
+	for _, event := range events {
+		races = append(races, model.DriverRaceOption{
+			ID:    event.RaceID,
+			Round: event.Round,
+			Name:  event.Name,
+		})
+	}
+
+	selectedRaceID := raceIDs[len(raceIDs)-1]
+	if raceID != nil {
+		if _, ok := raceIndexByID[*raceID]; !ok {
+			return nil, ErrF1RaceNotFound
+		}
+		selectedRaceID = *raceID
+	}
+
+	seasonPoints, seasonPointsByRaceID, err := r.getDriverSeasonPointsByYear(ctx, year, driverID)
+	if err != nil {
+		return nil, err
+	}
+
+	selectedSeasonPoint, ok := seasonPointsByRaceID[selectedRaceID]
+	if !ok {
+		return nil, ErrF1DriverNotFound
+	}
+
+	driverHeader, err := r.getDriverDetailHeaderByRace(ctx, driverID, selectedRaceID, selectedSeasonPoint.CumulativePoints)
+	if err != nil {
+		return nil, err
+	}
+
+	selectedRaceContext := &model.DriverSelectedRaceContext{
+		ID:               selectedSeasonPoint.RaceID,
+		Round:            selectedSeasonPoint.Round,
+		Name:             selectedSeasonPoint.Name,
+		RacePoints:       selectedSeasonPoint.RacePoints,
+		CumulativePoints: selectedSeasonPoint.CumulativePoints,
+		LapTimes:         []model.DriverLapTimePoint{},
+	}
+
+	startPosition, endPosition, err := r.getDriverRacePositions(ctx, driverID, selectedRaceID)
+	if err != nil {
+		return nil, err
+	}
+	selectedRaceContext.StartingPosition = startPosition
+	selectedRaceContext.EndingPosition = endPosition
+
+	qualifying, err := r.getDriverQualifyingByRace(ctx, driverID, selectedRaceID)
+	if err != nil {
+		return nil, err
+	}
+	selectedRaceContext.Qualifying = qualifying
+
+	lapTimes, err := r.getDriverLapTimesByRace(ctx, driverID, selectedRaceID)
+	if err != nil {
+		return nil, err
+	}
+	selectedRaceContext.LapTimes = lapTimes
+
+	raceScore, err := r.calculateRaceScore(ctx, selectedRaceID, driverID, endPosition)
+	if err != nil {
+		return nil, err
+	}
+	selectedRaceContext.RaceScore = raceScore
+
+	leaderCumulativePoints, err := r.getLeaderCumulativePointsByRace(ctx, selectedRaceID)
+	if err != nil {
+		return nil, err
+	}
+	selectedRaceContext.SeasonScore = calculateSeasonScore(
+		selectedSeasonPoint.CumulativePoints,
+		leaderCumulativePoints,
+	)
+
+	return &model.DriverDetailData{
+		Year:         year,
+		Driver:       *driverHeader,
+		Races:        races,
+		SelectedRace: selectedRaceContext,
+		SeasonPoints: seasonPoints,
+	}, nil
+}
+
+func (r *DBF1Repository) getDriverSeasonPointsByYear(
+	ctx context.Context,
+	year int,
+	driverID int,
+) ([]model.DriverSeasonPointsPoint, map[int]model.DriverSeasonPointsPoint, error) {
+	rows, err := r.Pool.Query(
+		ctx,
+		`SELECT
+			r.race_id,
+			r.round,
+			r.name,
+			COALESCE(fr.points, 0),
+			ds.points
+		 FROM f1_driver_standings ds
+		 JOIN f1_races r ON r.race_id = ds.race_id
+		 LEFT JOIN f1_results fr ON fr.race_id = ds.race_id AND fr.driver_id = ds.driver_id
+		 WHERE r.year = $1 AND ds.driver_id = $2
+		 ORDER BY r.round ASC`,
+		year,
+		driverID,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query driver season points by year: %w", err)
+	}
+	defer rows.Close()
+
+	seasonPoints := make([]model.DriverSeasonPointsPoint, 0)
+	seasonPointsByRaceID := make(map[int]model.DriverSeasonPointsPoint)
+
+	for rows.Next() {
+		var raceID int
+		var point model.DriverSeasonPointsPoint
+		if scanErr := rows.Scan(&raceID, &point.Round, &point.Name, &point.RacePoints, &point.CumulativePoints); scanErr != nil {
+			return nil, nil, fmt.Errorf("scan driver season points by year: %w", scanErr)
+		}
+		point.RaceID = strconv.Itoa(raceID)
+		seasonPoints = append(seasonPoints, point)
+		seasonPointsByRaceID[raceID] = point
+	}
+
+	if rows.Err() != nil {
+		return nil, nil, fmt.Errorf("iterate driver season points by year: %w", rows.Err())
+	}
+
+	if len(seasonPoints) == 0 {
+		return nil, nil, ErrF1DriverNotFound
+	}
+
+	return seasonPoints, seasonPointsByRaceID, nil
+}
+
+func (r *DBF1Repository) getDriverDetailHeaderByRace(
+	ctx context.Context,
+	driverID int,
+	raceID int,
+	currentPoints float64,
+) (*model.DriverDetailHeader, error) {
+	var firstName string
+	var lastName string
+	var number *int
+	var constructorName *string
+
+	err := r.Pool.QueryRow(
+		ctx,
+		`SELECT
+			d.forename,
+			d.surname,
+			d.number,
+			c.name
+		 FROM f1_drivers d
+		 LEFT JOIN f1_results fr ON fr.driver_id = d.driver_id AND fr.race_id = $2
+		 LEFT JOIN f1_constructors c ON c.constructor_id = fr.constructor_id
+		 WHERE d.driver_id = $1`,
+		driverID,
+		raceID,
+	).Scan(&firstName, &lastName, &number, &constructorName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrF1DriverNotFound
+		}
+		return nil, fmt.Errorf("query driver detail header by race: %w", err)
+	}
+
+	var numberString *string
+	if number != nil {
+		value := strconv.Itoa(*number)
+		numberString = &value
+	}
+
+	return &model.DriverDetailHeader{
+		ID:              strconv.Itoa(driverID),
+		Name:            strings.TrimSpace(firstName + " " + lastName),
+		Number:          numberString,
+		ConstructorName: constructorName,
+		CurrentPoints:   currentPoints,
+	}, nil
+}
+
+func (r *DBF1Repository) getDriverQualifyingByRace(
+	ctx context.Context,
+	driverID int,
+	raceID int,
+) (*model.DriverQualifyingBreakdown, error) {
+	var q1 *string
+	var q2 *string
+	var q3 *string
+
+	err := r.Pool.QueryRow(
+		ctx,
+		`SELECT q1, q2, q3
+		 FROM f1_qualifying
+		 WHERE race_id = $1 AND driver_id = $2`,
+		raceID,
+		driverID,
+	).Scan(&q1, &q2, &q3)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query driver qualifying by race: %w", err)
+	}
+
+	return &model.DriverQualifyingBreakdown{
+		Q1: q1,
+		Q2: q2,
+		Q3: q3,
+	}, nil
+}
+
+func (r *DBF1Repository) getDriverLapTimesByRace(
+	ctx context.Context,
+	driverID int,
+	raceID int,
+) ([]model.DriverLapTimePoint, error) {
+	rows, err := r.Pool.Query(
+		ctx,
+		`SELECT
+			lt.lap,
+			lt.milliseconds,
+			stats.min_ms,
+			stats.max_ms,
+			stats.avg_ms
+		 FROM f1_lap_times lt
+		 JOIN (
+			SELECT
+				lap,
+				MIN(milliseconds) AS min_ms,
+				MAX(milliseconds) AS max_ms,
+				AVG(milliseconds)::float8 AS avg_ms
+			FROM f1_lap_times
+			WHERE race_id = $1
+			GROUP BY lap
+		 ) stats ON stats.lap = lt.lap
+		 WHERE lt.race_id = $1 AND lt.driver_id = $2
+		 ORDER BY lt.lap ASC`,
+		raceID,
+		driverID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query driver lap times by race: %w", err)
+	}
+	defer rows.Close()
+
+	lapTimes := make([]model.DriverLapTimePoint, 0)
+	for rows.Next() {
+		var point model.DriverLapTimePoint
+		var milliseconds int
+		var minMilliseconds int
+		var maxMilliseconds int
+		var avgMilliseconds float64
+		if scanErr := rows.Scan(
+			&point.Lap,
+			&milliseconds,
+			&minMilliseconds,
+			&maxMilliseconds,
+			&avgMilliseconds,
+		); scanErr != nil {
+			return nil, fmt.Errorf("scan driver lap times by race: %w", scanErr)
+		}
+		point.Time = &milliseconds
+		point.MinTime = &minMilliseconds
+		point.MaxTime = &maxMilliseconds
+		point.AvgTime = &avgMilliseconds
+		lapTimes = append(lapTimes, point)
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("iterate driver lap times by race: %w", rows.Err())
+	}
+
+	return lapTimes, nil
+}
+
+func (r *DBF1Repository) getDriverRacePositions(
+	ctx context.Context,
+	driverID int,
+	raceID int,
+) (*int, *int, error) {
+	var grid int
+	var finishPosition *int
+
+	err := r.Pool.QueryRow(
+		ctx,
+		`SELECT grid, position
+		 FROM f1_results
+		 WHERE race_id = $1 AND driver_id = $2`,
+		raceID,
+		driverID,
+	).Scan(&grid, &finishPosition)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, ErrF1DriverNotFound
+		}
+		return nil, nil, fmt.Errorf("query driver race positions: %w", err)
+	}
+
+	startPosition := grid
+	return &startPosition, finishPosition, nil
+}
+
+func (r *DBF1Repository) calculateRaceScore(
+	ctx context.Context,
+	raceID int,
+	driverID int,
+	finishPosition *int,
+) (float64, error) {
+	finishComponent := 0.0
+	if finishPosition != nil {
+		maxPosition, err := r.getMaxFinishingPositionByRace(ctx, raceID)
+		if err != nil {
+			return 0, err
+		}
+		if maxPosition > 0 {
+			finishComponent = (float64(maxPosition-*finishPosition+1) / float64(maxPosition)) * 100
+		}
+	}
+
+	paceComponent, err := r.getDriverPaceScoreByRace(ctx, raceID, driverID)
+	if err != nil {
+		return 0, err
+	}
+
+	return clampScore((finishComponent * 0.7) + (paceComponent * 0.3)), nil
+}
+
+func (r *DBF1Repository) getMaxFinishingPositionByRace(ctx context.Context, raceID int) (int, error) {
+	var maxPosition int
+	err := r.Pool.QueryRow(
+		ctx,
+		`SELECT COALESCE(MAX(position), 0)
+		 FROM f1_results
+		 WHERE race_id = $1 AND position IS NOT NULL`,
+		raceID,
+	).Scan(&maxPosition)
+	if err != nil {
+		return 0, fmt.Errorf("query max finishing position by race: %w", err)
+	}
+
+	return maxPosition, nil
+}
+
+func (r *DBF1Repository) getDriverPaceScoreByRace(ctx context.Context, raceID int, driverID int) (float64, error) {
+	var driverAverage float64
+	var fieldAverage float64
+
+	err := r.Pool.QueryRow(
+		ctx,
+		`WITH driver_laps AS (
+			SELECT lap, milliseconds
+			FROM f1_lap_times
+			WHERE race_id = $1 AND driver_id = $2
+		), field_lap_averages AS (
+			SELECT lt.lap, AVG(lt.milliseconds)::float8 AS avg_ms
+			FROM f1_lap_times lt
+			JOIN driver_laps dl ON dl.lap = lt.lap
+			WHERE lt.race_id = $1
+			GROUP BY lt.lap
+		)
+		SELECT
+			COALESCE((SELECT AVG(milliseconds)::float8 FROM driver_laps), 0),
+			COALESCE((SELECT AVG(avg_ms)::float8 FROM field_lap_averages), 0)`,
+		raceID,
+		driverID,
+	).Scan(&driverAverage, &fieldAverage)
+	if err != nil {
+		return 0, fmt.Errorf("query driver pace score by race: %w", err)
+	}
+
+	if driverAverage <= 0 || fieldAverage <= 0 {
+		return 0, nil
+	}
+
+	return clampScore((fieldAverage / driverAverage) * 100), nil
+}
+
+func (r *DBF1Repository) getLeaderCumulativePointsByRace(ctx context.Context, raceID int) (float64, error) {
+	var leaderPoints float64
+	err := r.Pool.QueryRow(
+		ctx,
+		`SELECT COALESCE(MAX(points), 0)
+		 FROM f1_driver_standings
+		 WHERE race_id = $1`,
+		raceID,
+	).Scan(&leaderPoints)
+	if err != nil {
+		return 0, fmt.Errorf("query leader cumulative points by race: %w", err)
+	}
+
+	return leaderPoints, nil
+}
+
+func calculateSeasonScore(driverPoints float64, leaderPoints float64) float64 {
+	if driverPoints <= 0 || leaderPoints <= 0 {
+		return 0
+	}
+
+	return clampScore((driverPoints / leaderPoints) * 100)
+}
+
+func clampScore(score float64) float64 {
+	clamped := math.Max(0, math.Min(100, score))
+	return math.Round(clamped*100) / 100
 }
 
 func (r *DBF1Repository) getRacesByYear(

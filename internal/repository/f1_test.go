@@ -20,6 +20,25 @@ func TestGetEventsByYear_NilPool(t *testing.T) {
 	}
 }
 
+func TestGetDriverDetails_NilPool(t *testing.T) {
+	repo := &DBF1Repository{}
+
+	_, err := repo.GetDriverDetails(context.Background(), 1, 2024, nil)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+
+	if err.Error() != "database pool is nil" {
+		t.Fatalf("error = %v, want database pool is nil", err)
+	}
+}
+
+func TestF1DriverAndRaceErrors_AreDistinct(t *testing.T) {
+	if ErrF1DriverNotFound == ErrF1RaceNotFound {
+		t.Fatalf("expected distinct sentinel errors")
+	}
+}
+
 func TestGetConstructorColor_UsesFallbackForUnknown(t *testing.T) {
 	got := getConstructorColor(999999)
 	if got != f1FallbackColor {
