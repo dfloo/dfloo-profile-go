@@ -35,6 +35,7 @@ type F1Repository interface {
 	GetChampionshipByYear(ctx context.Context, year int) (*model.F1ChampionshipData, error)
 	GetDriversByYear(ctx context.Context, year int) ([]model.F1DriverStanding, error)
 	GetConstructorsByYear(ctx context.Context, year int) ([]model.F1ConstructorStanding, error)
+	GetEventsByYear(ctx context.Context, year int) ([]model.F1Event, error)
 }
 
 type DBF1Repository struct {
@@ -89,7 +90,7 @@ func (r *DBF1Repository) GetChampionshipByYear(
 		return nil, errors.New("database pool is nil")
 	}
 
-	races, raceIDs, raceIndexByID, err := r.getRacesByYear(ctx, year)
+	events, raceIDs, raceIndexByID, err := r.getRacesByYear(ctx, year)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func (r *DBF1Repository) GetChampionshipByYear(
 
 	return &model.F1ChampionshipData{
 		Year:    year,
-		Races:   races,
+		Events:  events,
 		Drivers: drivers,
 	}, nil
 }
@@ -230,10 +231,23 @@ func (r *DBF1Repository) GetConstructorsByYear(
 	return finalizeConstructorStandings(constructors), nil
 }
 
+func (r *DBF1Repository) GetEventsByYear(ctx context.Context, year int) ([]model.F1Event, error) {
+	if r.Pool == nil {
+		return nil, errors.New("database pool is nil")
+	}
+
+	events, _, _, err := r.getRacesByYear(ctx, year)
+	if err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
 func (r *DBF1Repository) getRacesByYear(
 	ctx context.Context,
 	year int,
-) ([]model.F1Race, []int, map[int]int, error) {
+) ([]model.F1Event, []int, map[int]int, error) {
 	rows, err := r.Pool.Query(
 		ctx,
 		`SELECT race_id, round, name
@@ -247,30 +261,31 @@ func (r *DBF1Repository) getRacesByYear(
 	}
 	defer rows.Close()
 
-	races := make([]model.F1Race, 0)
+	events := make([]model.F1Event, 0)
 	raceIDs := make([]int, 0)
 	raceIndexByID := make(map[int]int)
 
 	for rows.Next() {
 		var raceID int
-		var race model.F1Race
-		if scanErr := rows.Scan(&raceID, &race.Round, &race.Name); scanErr != nil {
+		var event model.F1Event
+		if scanErr := rows.Scan(&raceID, &event.Round, &event.Name); scanErr != nil {
 			return nil, nil, nil, fmt.Errorf("scan race by year: %w", scanErr)
 		}
-		raceIndexByID[raceID] = len(races)
+		raceIndexByID[raceID] = len(events)
 		raceIDs = append(raceIDs, raceID)
-		races = append(races, race)
+		event.RaceID = strconv.Itoa(raceID)
+		events = append(events, event)
 	}
 
 	if rows.Err() != nil {
 		return nil, nil, nil, fmt.Errorf("iterate races by year: %w", rows.Err())
 	}
 
-	if len(races) == 0 {
+	if len(events) == 0 {
 		return nil, nil, nil, ErrF1YearNotFound
 	}
 
-	return races, raceIDs, raceIndexByID, nil
+	return events, raceIDs, raceIndexByID, nil
 }
 
 func (r *DBF1Repository) getDriverStandingsByYear(

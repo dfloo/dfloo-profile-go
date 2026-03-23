@@ -17,6 +17,7 @@ type MockF1Repository struct {
 	GetChampionshipByYearFn func(ctx context.Context, year int) (*model.F1ChampionshipData, error)
 	GetDriversByYearFn      func(ctx context.Context, year int) ([]model.F1DriverStanding, error)
 	GetConstructorsByYearFn func(ctx context.Context, year int) ([]model.F1ConstructorStanding, error)
+	GetEventsByYearFn       func(ctx context.Context, year int) ([]model.F1Event, error)
 }
 
 func (m *MockF1Repository) GetAvailableYears(ctx context.Context) ([]int, error) {
@@ -56,6 +57,16 @@ func (m *MockF1Repository) GetConstructorsByYear(
 	return nil, errors.New("GetConstructorsByYear not implemented in mock")
 }
 
+func (m *MockF1Repository) GetEventsByYear(
+	ctx context.Context,
+	year int,
+) ([]model.F1Event, error) {
+	if m.GetEventsByYearFn != nil {
+		return m.GetEventsByYearFn(ctx, year)
+	}
+	return nil, errors.New("GetEventsByYear not implemented in mock")
+}
+
 func TestGetChampionships_DefaultLatestYearSuccess(t *testing.T) {
 	repo := &MockF1Repository{
 		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
@@ -68,9 +79,9 @@ func TestGetChampionships_DefaultLatestYearSuccess(t *testing.T) {
 
 			return &model.F1ChampionshipData{
 				Year: 2024,
-				Races: []model.F1Race{
-					{Round: 1, Name: "Bahrain GP"},
-					{Round: 2, Name: "Saudi Arabian GP"},
+				Events: []model.F1Event{
+					{RaceID: "1", Round: 1, Name: "Bahrain GP"},
+					{RaceID: "2", Round: 2, Name: "Saudi Arabian GP"},
 				},
 				Drivers: []model.F1ChampionshipDriver{
 					{
@@ -117,7 +128,7 @@ func TestGetChampionships_DefaultLatestYearSuccess(t *testing.T) {
 		t.Fatalf("data.year = %d, want 2024", got.Data.Year)
 	}
 
-	raceCount := len(got.Data.Races)
+	raceCount := len(got.Data.Events)
 	for _, driver := range got.Data.Drivers {
 		if len(driver.CumulativePoints) != raceCount {
 			t.Fatalf("cumulativePoints length = %d, want %d", len(driver.CumulativePoints), raceCount)
@@ -414,6 +425,128 @@ func TestGetConstructors_InternalFailure(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.GetConstructors(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Internal server error.")
+}
+
+func TestGetEvents_MissingYear(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/events", nil)
+	w := httptest.NewRecorder()
+
+	h.GetEvents(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Missing year query parameter.")
+}
+
+func TestGetEvents_InvalidYearFormat_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/events?year=abc", nil)
+	w := httptest.NewRecorder()
+
+	h.GetEvents(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid year format.")
+}
+
+func TestGetEvents_Success(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024, 2023}, nil
+		},
+		GetEventsByYearFn: func(ctx context.Context, year int) ([]model.F1Event, error) {
+			if year != 2024 {
+				t.Fatalf("year = %d, want %d", year, 2024)
+			}
+			return []model.F1Event{
+				{RaceID: "1", Round: 1, Name: "Bahrain Grand Prix"},
+				{RaceID: "2", Round: 2, Name: "Saudi Arabian Grand Prix"},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/events?year=2024", nil)
+	w := httptest.NewRecorder()
+
+	h.GetEvents(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var got model.F1EventsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if got.Data.Year != 2024 {
+		t.Fatalf("data.year = %d, want %d", got.Data.Year, 2024)
+	}
+
+	if len(got.Data.Events) != 2 {
+		t.Fatalf("events length = %d, want 2", len(got.Data.Events))
+	}
+
+	if got.Data.Events[0].RaceID != "1" || got.Data.Events[0].Round != 1 || got.Data.Events[0].Name != "Bahrain Grand Prix" {
+		t.Fatalf("first event = %+v, want raceId=1 round=1 name=Bahrain Grand Prix", got.Data.Events[0])
+	}
+}
+
+func TestGetEvents_UnsupportedYear(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+		GetEventsByYearFn: func(ctx context.Context, year int) ([]model.F1Event, error) {
+			return nil, repository.ErrF1YearNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/events?year=1999", nil)
+	w := httptest.NewRecorder()
+
+	h.GetEvents(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Unsupported championship year.")
+}
+
+func TestGetEvents_InternalFailure(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/events?year=2024", nil)
+	w := httptest.NewRecorder()
+
+	h.GetEvents(w, req)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
