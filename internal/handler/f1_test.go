@@ -16,6 +16,7 @@ type MockF1Repository struct {
 	GetAvailableYearsFunc   func(ctx context.Context) ([]int, error)
 	GetChampionshipByYearFn func(ctx context.Context, year int) (*model.F1ChampionshipData, error)
 	GetDriversByYearFn      func(ctx context.Context, year int) ([]model.F1DriverStanding, error)
+	GetDriverDetailsFn      func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error)
 	GetConstructorsByYearFn func(ctx context.Context, year int) ([]model.F1ConstructorStanding, error)
 	GetEventsByYearFn       func(ctx context.Context, year int) ([]model.F1Event, error)
 }
@@ -45,6 +46,18 @@ func (m *MockF1Repository) GetDriversByYear(
 		return m.GetDriversByYearFn(ctx, year)
 	}
 	return nil, errors.New("GetDriversByYear not implemented in mock")
+}
+
+func (m *MockF1Repository) GetDriverDetails(
+	ctx context.Context,
+	driverID int,
+	year int,
+	raceID *int,
+) (*model.DriverDetailData, error) {
+	if m.GetDriverDetailsFn != nil {
+		return m.GetDriverDetailsFn(ctx, driverID, year, raceID)
+	}
+	return nil, errors.New("GetDriverDetails not implemented in mock")
 }
 
 func (m *MockF1Repository) GetConstructorsByYear(
@@ -316,6 +329,268 @@ func TestGetDrivers_InternalFailure(t *testing.T) {
 	assertJSONErrorMessage(t, w.Body.Bytes(), "Internal server error.")
 }
 
+func TestGetDriverDetails_MissingDriverID(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/?year=2024", nil)
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Missing driver id path parameter.")
+}
+
+func TestGetDriverDetails_InvalidDriverID_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/abc?year=2024", nil)
+	req.SetPathValue("id", "abc")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid driver id format.")
+}
+
+func TestGetDriverDetails_MissingYear(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Missing year query parameter.")
+}
+
+func TestGetDriverDetails_InvalidYearFormat_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=abc", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid year format.")
+}
+
+func TestGetDriverDetails_InvalidRaceID_DoesNotDependOnDB(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024&raceId=abc", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Invalid raceId format.")
+}
+
+func TestGetDriverDetails_Success_DefaultRace(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024, 2023}, nil
+		},
+		GetDriverDetailsFn: func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error) {
+			if driverID != 1 {
+				t.Fatalf("driverID = %d, want 1", driverID)
+			}
+			if year != 2024 {
+				t.Fatalf("year = %d, want 2024", year)
+			}
+			if raceID != nil {
+				t.Fatalf("raceID = %v, want nil", *raceID)
+			}
+
+			return &model.DriverDetailData{
+				Year: 2024,
+				Driver: model.DriverDetailHeader{
+					ID:              "1",
+					Name:            "Max Verstappen",
+					Number:          stringPtr("1"),
+					ConstructorName: stringPtr("Red Bull"),
+					CurrentPoints:   43,
+				},
+				Races: []model.DriverRaceOption{
+					{ID: "1", Round: 1, Name: "Bahrain GP"},
+					{ID: "2", Round: 2, Name: "Saudi Arabian GP"},
+				},
+				SelectedRace: &model.DriverSelectedRaceContext{
+					ID:               "2",
+					Round:            2,
+					Name:             "Saudi Arabian GP",
+					RacePoints:       18,
+					CumulativePoints: 43,
+					StartingPosition: intPtr(1),
+					EndingPosition:   intPtr(1),
+					RaceScore:        97.4,
+					SeasonScore:      100,
+					Qualifying: &model.DriverQualifyingBreakdown{
+						Q1: stringPtr("1:28.171"),
+						Q2: stringPtr("1:27.567"),
+						Q3: stringPtr("1:27.241"),
+					},
+					LapTimes: []model.DriverLapTimePoint{
+						{Lap: 1, Time: intPtr(95111), MinTime: intPtr(94300), MaxTime: intPtr(98900), AvgTime: floatPtr(95600.5)},
+					},
+				},
+				SeasonPoints: []model.DriverSeasonPointsPoint{
+					{RaceID: "1", Round: 1, Name: "Bahrain GP", RacePoints: 25, CumulativePoints: 25},
+					{RaceID: "2", Round: 2, Name: "Saudi Arabian GP", RacePoints: 18, CumulativePoints: 43},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var got model.DriverDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if got.Data.Driver.ID != "1" {
+		t.Fatalf("driver.id = %s, want 1", got.Data.Driver.ID)
+	}
+	if got.Data.SelectedRace == nil || got.Data.SelectedRace.ID != "2" {
+		t.Fatalf("selectedRace = %+v, want id=2", got.Data.SelectedRace)
+	}
+	if len(got.AvailableYears) != 2 {
+		t.Fatalf("availableYears length = %d, want 2", len(got.AvailableYears))
+	}
+}
+
+func TestGetDriverDetails_UnsupportedYear(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+		GetDriverDetailsFn: func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error) {
+			return nil, repository.ErrF1YearNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=1999", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Unsupported championship year.")
+}
+
+func TestGetDriverDetails_DriverNotFound(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+		GetDriverDetailsFn: func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error) {
+			return nil, repository.ErrF1DriverNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Driver not found for championship year.")
+}
+
+func TestGetDriverDetails_RaceNotFound(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024}, nil
+		},
+		GetDriverDetailsFn: func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error) {
+			return nil, repository.ErrF1RaceNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024&raceId=9999", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Race not found for championship year.")
+}
+
+func TestGetDriverDetails_InternalFailure(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return nil, errors.New("db down")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+
+	assertJSONErrorMessage(t, w.Body.Bytes(), "Internal server error.")
+}
+
 func TestGetConstructors_MissingYear(t *testing.T) {
 	h := NewF1Handler(&MockF1Repository{
 		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
@@ -568,5 +843,13 @@ func assertJSONErrorMessage(t *testing.T, body []byte, want string) {
 }
 
 func stringPtr(v string) *string {
+	return &v
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func floatPtr(v float64) *float64 {
 	return &v
 }
