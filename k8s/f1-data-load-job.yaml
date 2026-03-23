@@ -23,6 +23,8 @@ spec:
             - "sh"
             - "-c"
             - |
+              set -eu
+
               export PGPASSWORD="$(cat /mnt/secrets-store/postgres-password)"
               export PGDATABASE="$(cat /mnt/secrets-store/postgres-db)"
               export PGUSER="$(cat /mnt/secrets-store/postgres-user)"
@@ -30,7 +32,23 @@ spec:
               export PGHOST="/cloudsql/${SQL_INSTANCE_CONNECTION_NAME}"
               export PGPORT="5432"
 
-              trap 'touch /cloudsql/done' EXIT
+              SOCKET="${PGHOST}/.s.PGSQL.${PGPORT}"
+              trap 'status=$?; touch /cloudsql/done; exit ${status}' EXIT
+
+              echo "Waiting for Cloud SQL socket: ${SOCKET}"
+              for i in $(seq 1 60); do
+                if [ -S "${SOCKET}" ]; then
+                  break
+                fi
+                echo "Retry ${i}: Cloud SQL socket not ready"
+                sleep 5
+              done
+
+              if [ ! -S "${SOCKET}" ]; then
+                echo "Cloud SQL socket unavailable after retries: ${SOCKET}" >&2
+                exit 1
+              fi
+
               /dfloo-f1-loader --data-dir /db/f1-data
           resources:
             requests:
