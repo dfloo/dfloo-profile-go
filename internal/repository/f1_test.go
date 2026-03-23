@@ -1,10 +1,24 @@
 package repository
 
 import (
+	"context"
 	"testing"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 )
+
+func TestGetEventsByYear_NilPool(t *testing.T) {
+	repo := &DBF1Repository{}
+
+	_, err := repo.GetEventsByYear(context.Background(), 2024)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+
+	if err.Error() != "database pool is nil" {
+		t.Fatalf("error = %v, want database pool is nil", err)
+	}
+}
 
 func TestGetConstructorColor_UsesFallbackForUnknown(t *testing.T) {
 	got := getConstructorColor(999999)

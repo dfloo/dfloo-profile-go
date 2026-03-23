@@ -64,6 +64,22 @@ type F1ConstructorStanding struct {
 	LatestPoints float64 `json:"latestPoints"`
 }
 
+type F1EventsResponse struct {
+	AvailableYears []int        `json:"availableYears"`
+	Data           F1EventsData `json:"data"`
+}
+
+type F1EventsData struct {
+	Year   int       `json:"year"`
+	Events []F1Event `json:"events"`
+}
+
+type F1Event struct {
+	RaceID string `json:"raceId"`
+	Round  int    `json:"round"`
+	Name   string `json:"name"`
+}
+
 type APIErrorResponse struct {
 	Message string `json:"message"`
 }

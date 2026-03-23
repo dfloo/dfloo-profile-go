@@ -143,5 +143,18 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
+	mux.HandleFunc("/api/f1/events", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					f1Handler.GetEvents(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
 	return mux
 }
