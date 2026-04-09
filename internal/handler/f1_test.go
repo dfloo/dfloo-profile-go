@@ -467,6 +467,20 @@ func TestGetDriverDetails_Success_DefaultRace(t *testing.T) {
 					LapTimes: []model.DriverLapTimePoint{
 						{Lap: 1, Time: intPtr(95111), MinTime: intPtr(94300), MaxTime: intPtr(98900), AvgTime: floatPtr(95600.5)},
 					},
+					ChartData: &model.DriverSelectedRaceChartData{
+						PaceDeltaVsAverageMs: []model.DriverMetricByLapPoint{
+							{Lap: 1, Value: intPtr(-489)},
+						},
+						GapToFastestMs: []model.DriverMetricByLapPoint{
+							{Lap: 1, Value: intPtr(811)},
+						},
+						Rolling3LapPaceMs: []model.DriverMetricByLapPoint{
+							{Lap: 1, Value: nil},
+						},
+						PositionsByLap: []model.DriverPositionsByLapPoint{
+							{Lap: 1, DriverPosition: intPtr(1), TeammatePosition: intPtr(4)},
+						},
+					},
 				},
 				SeasonPoints: []model.DriverSeasonPointsPoint{
 					{RaceID: "1", Round: 1, Name: "Bahrain GP", RacePoints: 25, CumulativePoints: 25},
@@ -497,8 +511,110 @@ func TestGetDriverDetails_Success_DefaultRace(t *testing.T) {
 	if got.Data.SelectedRace == nil || got.Data.SelectedRace.ID != "2" {
 		t.Fatalf("selectedRace = %+v, want id=2", got.Data.SelectedRace)
 	}
+	if got.Data.SelectedRace.ChartData == nil {
+		t.Fatalf("selectedRace.chartData is nil, want populated chart data")
+	}
+	if len(got.Data.SelectedRace.ChartData.PaceDeltaVsAverageMs) != 1 {
+		t.Fatalf(
+			"selectedRace.chartData.paceDeltaVsAverageMs length = %d, want 1",
+			len(got.Data.SelectedRace.ChartData.PaceDeltaVsAverageMs),
+		)
+	}
 	if len(got.AvailableYears) != 2 {
 		t.Fatalf("availableYears length = %d, want 2", len(got.AvailableYears))
+	}
+}
+
+func TestGetDriverDetails_Success_SpecificRaceID(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024, 2023}, nil
+		},
+		GetDriverDetailsFn: func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error) {
+			if driverID != 1 {
+				t.Fatalf("driverID = %d, want 1", driverID)
+			}
+			if year != 2024 {
+				t.Fatalf("year = %d, want 2024", year)
+			}
+			if raceID == nil {
+				t.Fatalf("raceID = nil, want non-nil")
+			}
+			if *raceID != 2 {
+				t.Fatalf("raceID = %d, want 2", *raceID)
+			}
+
+			return &model.DriverDetailData{Year: 2024}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024&raceId=2", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestGetDriverDetails_PartialChartSeries_AllowsNullSeries(t *testing.T) {
+	h := NewF1Handler(&MockF1Repository{
+		GetAvailableYearsFunc: func(ctx context.Context) ([]int, error) {
+			return []int{2024, 2023}, nil
+		},
+		GetDriverDetailsFn: func(ctx context.Context, driverID int, year int, raceID *int) (*model.DriverDetailData, error) {
+			return &model.DriverDetailData{
+				Year: 2024,
+				Driver: model.DriverDetailHeader{
+					ID:   "1",
+					Name: "Max Verstappen",
+				},
+				SelectedRace: &model.DriverSelectedRaceContext{
+					ID:       "2",
+					Round:    2,
+					Name:     "Saudi Arabian GP",
+					LapTimes: []model.DriverLapTimePoint{},
+					ChartData: &model.DriverSelectedRaceChartData{
+						PaceDeltaVsAverageMs: nil,
+						GapToFastestMs: []model.DriverMetricByLapPoint{
+							{Lap: 1, Value: intPtr(811)},
+						},
+						Rolling3LapPaceMs: nil,
+						PositionsByLap: []model.DriverPositionsByLapPoint{
+							{Lap: 1, DriverPosition: intPtr(1), TeammatePosition: nil},
+						},
+					},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/f1/drivers/1?year=2024", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	h.GetDriverDetails(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var got model.DriverDetailResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if got.Data.SelectedRace == nil || got.Data.SelectedRace.ChartData == nil {
+		t.Fatalf("selectedRace.chartData = %+v, want non-nil", got.Data.SelectedRace)
+	}
+
+	if got.Data.SelectedRace.ChartData.PaceDeltaVsAverageMs != nil {
+		t.Fatalf("paceDeltaVsAverageMs = %+v, want nil", got.Data.SelectedRace.ChartData.PaceDeltaVsAverageMs)
+	}
+	if got.Data.SelectedRace.ChartData.Rolling3LapPaceMs != nil {
+		t.Fatalf("rolling3LapPaceMs = %+v, want nil", got.Data.SelectedRace.ChartData.Rolling3LapPaceMs)
 	}
 }
 
