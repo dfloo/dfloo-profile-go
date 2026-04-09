@@ -58,6 +58,15 @@ type championshipDriverAccumulator struct {
 	standingsByRace  map[int]float64
 }
 
+type driverLapStatsPoint struct {
+	Lap      int
+	Time     *int
+	MinTime  *int
+	MaxTime  *int
+	AvgTime  *float64
+	Position *int
+}
+
 func NewDBF1Repository(pool *pgxpool.Pool) *DBF1Repository {
 	return &DBF1Repository{Pool: pool}
 }
@@ -320,11 +329,17 @@ func (r *DBF1Repository) GetDriverDetails(
 	}
 	selectedRaceContext.Qualifying = qualifying
 
-	lapTimes, err := r.getDriverLapTimesByRace(ctx, driverID, selectedRaceID)
+	lapStats, err := r.getDriverLapStatsByRace(ctx, driverID, selectedRaceID)
 	if err != nil {
 		return nil, err
 	}
-	selectedRaceContext.LapTimes = lapTimes
+	selectedRaceContext.LapTimes = buildDriverLapTimes(lapStats)
+
+	teammatePositionsByLap, err := r.getTeammatePositionsByLap(ctx, driverID, selectedRaceID)
+	if err != nil {
+		return nil, err
+	}
+	selectedRaceContext.ChartData = buildDriverSelectedRaceChartData(lapStats, teammatePositionsByLap)
 
 	raceScore, err := r.calculateRaceScore(ctx, selectedRaceID, driverID, endPosition)
 	if err != nil {
@@ -479,16 +494,17 @@ func (r *DBF1Repository) getDriverQualifyingByRace(
 	}, nil
 }
 
-func (r *DBF1Repository) getDriverLapTimesByRace(
+func (r *DBF1Repository) getDriverLapStatsByRace(
 	ctx context.Context,
 	driverID int,
 	raceID int,
-) ([]model.DriverLapTimePoint, error) {
+) ([]driverLapStatsPoint, error) {
 	rows, err := r.Pool.Query(
 		ctx,
 		`SELECT
 			lt.lap,
 			lt.milliseconds,
+			lt.position,
 			stats.min_ms,
 			stats.max_ms,
 			stats.avg_ms
@@ -509,38 +525,213 @@ func (r *DBF1Repository) getDriverLapTimesByRace(
 		driverID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query driver lap times by race: %w", err)
+		return nil, fmt.Errorf("query driver lap stats by race: %w", err)
 	}
 	defer rows.Close()
 
-	lapTimes := make([]model.DriverLapTimePoint, 0)
+	lapStats := make([]driverLapStatsPoint, 0)
 	for rows.Next() {
-		var point model.DriverLapTimePoint
+		var point driverLapStatsPoint
 		var milliseconds int
+		var position int
 		var minMilliseconds int
 		var maxMilliseconds int
 		var avgMilliseconds float64
 		if scanErr := rows.Scan(
 			&point.Lap,
 			&milliseconds,
+			&position,
 			&minMilliseconds,
 			&maxMilliseconds,
 			&avgMilliseconds,
 		); scanErr != nil {
-			return nil, fmt.Errorf("scan driver lap times by race: %w", scanErr)
+			return nil, fmt.Errorf("scan driver lap stats by race: %w", scanErr)
 		}
-		point.Time = &milliseconds
-		point.MinTime = &minMilliseconds
-		point.MaxTime = &maxMilliseconds
-		point.AvgTime = &avgMilliseconds
-		lapTimes = append(lapTimes, point)
+		positionValue := position
+		millisecondsValue := milliseconds
+		minMillisecondsValue := minMilliseconds
+		maxMillisecondsValue := maxMilliseconds
+		avgMillisecondsValue := avgMilliseconds
+
+		point.Position = &positionValue
+		point.Time = &millisecondsValue
+		point.MinTime = &minMillisecondsValue
+		point.MaxTime = &maxMillisecondsValue
+		point.AvgTime = &avgMillisecondsValue
+		lapStats = append(lapStats, point)
 	}
 
 	if rows.Err() != nil {
-		return nil, fmt.Errorf("iterate driver lap times by race: %w", rows.Err())
+		return nil, fmt.Errorf("iterate driver lap stats by race: %w", rows.Err())
 	}
 
-	return lapTimes, nil
+	return lapStats, nil
+}
+
+func buildDriverLapTimes(lapStats []driverLapStatsPoint) []model.DriverLapTimePoint {
+	lapTimes := make([]model.DriverLapTimePoint, 0, len(lapStats))
+	for _, point := range lapStats {
+		lapTimes = append(lapTimes, model.DriverLapTimePoint{
+			Lap:     point.Lap,
+			Time:    point.Time,
+			MinTime: point.MinTime,
+			MaxTime: point.MaxTime,
+			AvgTime: point.AvgTime,
+		})
+	}
+
+	return lapTimes
+}
+
+func buildDriverSelectedRaceChartData(
+	lapStats []driverLapStatsPoint,
+	teammatePositionsByLap map[int]*int,
+) *model.DriverSelectedRaceChartData {
+	if len(lapStats) == 0 {
+		return &model.DriverSelectedRaceChartData{}
+	}
+
+	sortedLapStats := append([]driverLapStatsPoint(nil), lapStats...)
+	sort.SliceStable(sortedLapStats, func(i, j int) bool {
+		return sortedLapStats[i].Lap < sortedLapStats[j].Lap
+	})
+
+	paceDelta := make([]model.DriverMetricByLapPoint, 0, len(sortedLapStats))
+	gapToFastest := make([]model.DriverMetricByLapPoint, 0, len(sortedLapStats))
+	rollingPace := make([]model.DriverMetricByLapPoint, 0, len(sortedLapStats))
+	driverPositionsByLap := make(map[int]*int, len(sortedLapStats))
+
+	for idx, lapStat := range sortedLapStats {
+		driverPositionsByLap[lapStat.Lap] = lapStat.Position
+
+		var paceDeltaValue *int
+		if lapStat.Time != nil && lapStat.AvgTime != nil {
+			delta := int(math.Round(float64(*lapStat.Time) - *lapStat.AvgTime))
+			paceDeltaValue = &delta
+		}
+		paceDelta = append(paceDelta, model.DriverMetricByLapPoint{Lap: lapStat.Lap, Value: paceDeltaValue})
+
+		var gapToFastestValue *int
+		if lapStat.Time != nil && lapStat.MinTime != nil {
+			gap := *lapStat.Time - *lapStat.MinTime
+			gapToFastestValue = &gap
+		}
+		gapToFastest = append(gapToFastest, model.DriverMetricByLapPoint{Lap: lapStat.Lap, Value: gapToFastestValue})
+
+		var rollingValue *int
+		if idx >= 2 {
+			first := sortedLapStats[idx-2].Time
+			second := sortedLapStats[idx-1].Time
+			third := sortedLapStats[idx].Time
+			if first != nil && second != nil && third != nil {
+				avg := int(math.Round(float64(*first+*second+*third) / 3.0))
+				rollingValue = &avg
+			}
+		}
+		rollingPace = append(rollingPace, model.DriverMetricByLapPoint{Lap: lapStat.Lap, Value: rollingValue})
+	}
+
+	positionsByLap := buildDriverPositionsByLapSeries(driverPositionsByLap, teammatePositionsByLap)
+
+	return &model.DriverSelectedRaceChartData{
+		PaceDeltaVsAverageMs: paceDelta,
+		GapToFastestMs:       gapToFastest,
+		Rolling3LapPaceMs:    rollingPace,
+		PositionsByLap:       positionsByLap,
+	}
+}
+
+func buildDriverPositionsByLapSeries(
+	driverPositionsByLap map[int]*int,
+	teammatePositionsByLap map[int]*int,
+) []model.DriverPositionsByLapPoint {
+	lapsSet := make(map[int]struct{})
+	for lap := range driverPositionsByLap {
+		lapsSet[lap] = struct{}{}
+	}
+	for lap := range teammatePositionsByLap {
+		lapsSet[lap] = struct{}{}
+	}
+
+	if len(lapsSet) == 0 {
+		return nil
+	}
+
+	laps := make([]int, 0, len(lapsSet))
+	for lap := range lapsSet {
+		laps = append(laps, lap)
+	}
+	sort.Ints(laps)
+
+	positions := make([]model.DriverPositionsByLapPoint, 0, len(laps))
+	for _, lap := range laps {
+		positions = append(positions, model.DriverPositionsByLapPoint{
+			Lap:              lap,
+			DriverPosition:   driverPositionsByLap[lap],
+			TeammatePosition: teammatePositionsByLap[lap],
+		})
+	}
+
+	return positions
+}
+
+func (r *DBF1Repository) getTeammatePositionsByLap(
+	ctx context.Context,
+	driverID int,
+	raceID int,
+) (map[int]*int, error) {
+	var teammateDriverID int
+	err := r.Pool.QueryRow(
+		ctx,
+		`SELECT teammate.driver_id
+		 FROM f1_results own
+		 JOIN f1_results teammate
+		   ON teammate.race_id = own.race_id
+		  AND teammate.constructor_id = own.constructor_id
+		  AND teammate.driver_id <> own.driver_id
+		 WHERE own.race_id = $1 AND own.driver_id = $2
+		 ORDER BY teammate.driver_id ASC
+		 LIMIT 1`,
+		raceID,
+		driverID,
+	).Scan(&teammateDriverID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query teammate by race: %w", err)
+	}
+
+	rows, err := r.Pool.Query(
+		ctx,
+		`SELECT lap, position
+		 FROM f1_lap_times
+		 WHERE race_id = $1 AND driver_id = $2
+		 ORDER BY lap ASC`,
+		raceID,
+		teammateDriverID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query teammate lap positions by race: %w", err)
+	}
+	defer rows.Close()
+
+	teammatePositions := make(map[int]*int)
+	for rows.Next() {
+		var lap int
+		var position int
+		if scanErr := rows.Scan(&lap, &position); scanErr != nil {
+			return nil, fmt.Errorf("scan teammate lap positions by race: %w", scanErr)
+		}
+		pos := position
+		teammatePositions[lap] = &pos
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("iterate teammate lap positions by race: %w", rows.Err())
+	}
+
+	return teammatePositions, nil
 }
 
 func (r *DBF1Repository) getDriverRacePositions(

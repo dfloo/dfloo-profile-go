@@ -72,6 +72,24 @@ type DriverLapTimePoint struct {
 	AvgTime *float64 `json:"avgTime"`
 }
 
+type DriverMetricByLapPoint struct {
+	Lap   int  `json:"lap"`
+	Value *int `json:"value"`
+}
+
+type DriverPositionsByLapPoint struct {
+	Lap              int  `json:"lap"`
+	DriverPosition   *int `json:"driverPosition"`
+	TeammatePosition *int `json:"teammatePosition"`
+}
+
+type DriverSelectedRaceChartData struct {
+	PaceDeltaVsAverageMs []DriverMetricByLapPoint    `json:"paceDeltaVsAverageMs"`
+	GapToFastestMs       []DriverMetricByLapPoint    `json:"gapToFastestMs"`
+	Rolling3LapPaceMs    []DriverMetricByLapPoint    `json:"rolling3LapPaceMs"`
+	PositionsByLap       []DriverPositionsByLapPoint `json:"positionsByLap"`
+}
+
 type DriverSeasonPointsPoint struct {
 	RaceID           string  `json:"raceId"`
 	Round            int     `json:"round"`
@@ -81,17 +99,18 @@ type DriverSeasonPointsPoint struct {
 }
 
 type DriverSelectedRaceContext struct {
-	ID               string                     `json:"id"`
-	Round            int                        `json:"round"`
-	Name             string                     `json:"name"`
-	RacePoints       float64                    `json:"racePoints"`
-	CumulativePoints float64                    `json:"cumulativePoints"`
-	StartingPosition *int                       `json:"startingPosition"`
-	EndingPosition   *int                       `json:"endingPosition"`
-	RaceScore        float64                    `json:"raceScore"`
-	SeasonScore      float64                    `json:"seasonScore"`
-	Qualifying       *DriverQualifyingBreakdown `json:"qualifying"`
-	LapTimes         []DriverLapTimePoint       `json:"lapTimes"`
+	ID               string                       `json:"id"`
+	Round            int                          `json:"round"`
+	Name             string                       `json:"name"`
+	RacePoints       float64                      `json:"racePoints"`
+	CumulativePoints float64                      `json:"cumulativePoints"`
+	StartingPosition *int                         `json:"startingPosition"`
+	EndingPosition   *int                         `json:"endingPosition"`
+	RaceScore        float64                      `json:"raceScore"`
+	SeasonScore      float64                      `json:"seasonScore"`
+	Qualifying       *DriverQualifyingBreakdown   `json:"qualifying"`
+	LapTimes         []DriverLapTimePoint         `json:"lapTimes"`
+	ChartData        *DriverSelectedRaceChartData `json:"chartData"`
 }
 
 type F1DriversData struct {
