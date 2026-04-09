@@ -547,11 +547,17 @@ func (r *DBF1Repository) getDriverLapStatsByRace(
 		); scanErr != nil {
 			return nil, fmt.Errorf("scan driver lap stats by race: %w", scanErr)
 		}
-		point.Position = &position
-		point.Time = &milliseconds
-		point.MinTime = &minMilliseconds
-		point.MaxTime = &maxMilliseconds
-		point.AvgTime = &avgMilliseconds
+		positionValue := position
+		millisecondsValue := milliseconds
+		minMillisecondsValue := minMilliseconds
+		maxMillisecondsValue := maxMilliseconds
+		avgMillisecondsValue := avgMilliseconds
+
+		point.Position = &positionValue
+		point.Time = &millisecondsValue
+		point.MinTime = &minMillisecondsValue
+		point.MaxTime = &maxMillisecondsValue
+		point.AvgTime = &avgMillisecondsValue
 		lapStats = append(lapStats, point)
 	}
 
