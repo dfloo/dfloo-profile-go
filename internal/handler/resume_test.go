@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -410,6 +411,13 @@ func TestPutResume_DownloadUsesNewVersionWhenOldGenerationCompletesLater(t *test
 
 	oldStarted := make(chan struct{}, 1)
 	releaseOld := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			close(releaseOld)
+		})
+	}
+	defer release()
 
 	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
 		suffix := "new"
@@ -444,8 +452,7 @@ func TestPutResume_DownloadUsesNewVersionWhenOldGenerationCompletesLater(t *test
 	if putW.Code != http.StatusOK {
 		t.Fatalf("Expected status %d, got %d", http.StatusOK, putW.Code)
 	}
-
-	close(releaseOld)
+	release()
 	handler.asyncWg.Wait()
 
 	downloadReq := testutil.CreateRequestWithUserID("GET", "/download/encoded", "test")
