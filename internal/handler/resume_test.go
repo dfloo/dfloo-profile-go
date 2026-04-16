@@ -8,8 +8,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/testutil"
@@ -315,6 +318,216 @@ func TestPutResume_RepositoryError(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+func TestPutResume_RegeneratesCachedPDFAfterUpdate(t *testing.T) {
+	mockRepo := &MockResumeRepository{
+		UpdateResumeFunc: func(ctx context.Context, resume *model.Resume, userID string) error {
+			if resume.ResumeID != "decoded" {
+				t.Fatalf("Expected decoded resume ID, got %s", resume.ResumeID)
+			}
+			return nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+
+	cacheFilePath := handler.resumeCacheFilePath("decoded")
+	if err := os.WriteFile(cacheFilePath, []byte("stale-pdf"), 0644); err != nil {
+		t.Fatalf("Failed to seed cache file: %v", err)
+	}
+
+	var generationCount int32
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		atomic.AddInt32(&generationCount, 1)
+		tempDir := t.TempDir()
+		return filepath.Join(tempDir, "resume.tex"), nil
+	}
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		return []byte("fresh-pdf"), nil
+	}
+
+	req := testutil.CreateRequestWithBody("PUT", "/resumes", testutil.MockResumeJSON(), "test")
+	w := httptest.NewRecorder()
+
+	handler.PutResume(w, req)
+	handler.asyncWg.Wait()
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if atomic.LoadInt32(&generationCount) != 1 {
+		t.Fatalf("Expected generation count 1, got %d", atomic.LoadInt32(&generationCount))
+	}
+
+	pdfBytes, err := os.ReadFile(cacheFilePath)
+	if err != nil {
+		t.Fatalf("Failed to read cache file: %v", err)
+	}
+	if got := string(pdfBytes); got != "fresh-pdf" {
+		t.Fatalf("Expected refreshed PDF bytes, got %q", got)
+	}
+}
+
+func TestResumeCacheIdentity_UsesUpdatedVersion(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+
+	updated := time.Unix(1710000000, 123456789)
+	resume := &model.Resume{ResumeID: "resume-1", Updated: updated}
+	_, versionedPath := handler.resumeCacheIdentity(resume)
+
+	if filepath.Dir(versionedPath) != handler.CacheDir {
+		t.Fatalf("Expected cache path in cache dir, got %s", versionedPath)
+	}
+
+	base := filepath.Base(versionedPath)
+	if !strings.HasSuffix(base, ".pdf") {
+		t.Fatalf("Expected pdf extension, got %s", base)
+	}
+	if !strings.Contains(base, "_") {
+		t.Fatalf("Expected version delimiter in cache filename, got %s", base)
+	}
+}
+
+func TestPutResume_DownloadUsesNewVersionWhenOldGenerationCompletesLater(t *testing.T) {
+	oldUpdated := time.Unix(1710000000, 0)
+	newUpdated := time.Unix(1710000001, 0)
+
+	mockRepo := &MockResumeRepository{
+		UpdateResumeFunc: func(ctx context.Context, resume *model.Resume, userID string) error {
+			resume.Updated = newUpdated
+			return nil
+		},
+		GetResumeByIDFunc: func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
+			resume := testutil.MockResume()
+			resume.ResumeID = resumeID
+			resume.Updated = newUpdated
+			return resume, nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+
+	oldStarted := make(chan struct{}, 1)
+	releaseOld := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			close(releaseOld)
+		})
+	}
+	defer release()
+
+	handler.GenerateFromResume = func(resume *model.Resume) (string, error) {
+		suffix := "new"
+		if resume.Updated.Equal(oldUpdated) {
+			suffix = "old"
+			select {
+			case oldStarted <- struct{}{}:
+			default:
+			}
+		}
+		tempDir := t.TempDir()
+		return filepath.Join(tempDir, suffix+".tex"), nil
+	}
+
+	handler.ConvertToPDF = func(filePath string) ([]byte, error) {
+		if strings.Contains(filePath, "old.tex") {
+			<-releaseOld
+			return []byte("old-pdf"), nil
+		}
+		return []byte("new-pdf"), nil
+	}
+
+	oldResume := testutil.MockResume()
+	oldResume.ResumeID = "decoded"
+	oldResume.Updated = oldUpdated
+	handler.triggerAsyncResumePDFGeneration(oldResume)
+	<-oldStarted
+
+	putReq := testutil.CreateRequestWithBody("PUT", "/resumes", testutil.MockResumeJSON(), "test")
+	putW := httptest.NewRecorder()
+	handler.PutResume(putW, putReq)
+	if putW.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d", http.StatusOK, putW.Code)
+	}
+	release()
+	handler.asyncWg.Wait()
+
+	downloadReq := testutil.CreateRequestWithUserID("GET", "/download/encoded", "test")
+	downloadReq.SetPathValue("resumeId", "encoded")
+	downloadW := httptest.NewRecorder()
+	handler.DownloadResumePDF(downloadW, downloadReq)
+
+	if downloadW.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d", http.StatusOK, downloadW.Code)
+	}
+	if got := downloadW.Body.String(); got != "new-pdf" {
+		t.Fatalf("Expected new version PDF body, got %q", got)
+	}
+
+	_, oldCachePath := handler.resumeCacheIdentity(&model.Resume{ResumeID: "decoded", Updated: oldUpdated})
+	if _, err := os.Stat(oldCachePath); err != nil {
+		t.Fatalf("Expected old version cache file to exist, stat err=%v", err)
+	}
+
+	_, newCachePath := handler.resumeCacheIdentity(&model.Resume{ResumeID: "decoded", Updated: newUpdated})
+	if _, err := os.Stat(newCachePath); err != nil {
+		t.Fatalf("Expected new version cache file to exist, stat err=%v", err)
+	}
+}
+
+func TestSetDefaultResume_RemovesCacheFilesForAffectedResumes(t *testing.T) {
+	prevDefault := testutil.MockResume()
+	prevDefault.ResumeID = "prev-default"
+	prevDefault.Default = true
+
+	mockRepo := &MockResumeRepository{
+		GetDefaultResumeFunc: func(ctx context.Context) (*model.Resume, error) {
+			copy := *prevDefault
+			return &copy, nil
+		},
+		GetResumeByIDFunc: func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
+			if resumeID != "new-default" {
+				t.Fatalf("Expected resumeID new-default, got %s", resumeID)
+			}
+			resume := testutil.MockResume()
+			resume.ResumeID = resumeID
+			return resume, nil
+		},
+		UpdateResumeFunc: func(ctx context.Context, resume *model.Resume, userID string) error {
+			return nil
+		},
+	}
+
+	handler := createTestResumeHandler(t, mockRepo)
+	handler.HasPermission = func(ctx context.Context, permission string) bool { return true }
+	handler.DecodeID = func(id string) (string, error) { return id, nil }
+
+	prevCacheFilePath := handler.resumeCacheFilePath("prev-default")
+	newCacheFilePath := handler.resumeCacheFilePath("new-default")
+	if err := os.WriteFile(prevCacheFilePath, []byte("cached-prev"), 0644); err != nil {
+		t.Fatalf("Failed to seed previous default cache: %v", err)
+	}
+	if err := os.WriteFile(newCacheFilePath, []byte("cached-new"), 0644); err != nil {
+		t.Fatalf("Failed to seed new default cache: %v", err)
+	}
+
+	req := testutil.CreateRequestWithBody("PUT", "/resumes/default", `{"resumeId":"new-default"}`, "test")
+	w := httptest.NewRecorder()
+
+	handler.SetDefaultResume(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	if _, err := os.Stat(prevCacheFilePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Expected previous default cache file to be removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(newCacheFilePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Expected new default cache file to be removed, stat err=%v", err)
 	}
 }
 
