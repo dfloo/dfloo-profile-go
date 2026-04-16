@@ -147,6 +147,7 @@ func (h *ResumeHandler) PutResume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to update resume", http.StatusInternalServerError)
 		return
 	}
+	h.deleteResumeCacheFiles([]string{resume.ResumeID})
 	h.triggerAsyncResumePDFGeneration(&resume)
 	resume.ResumeID = encodedResumeID
 	resume.Profile.ProfileID = encodedProfileID
@@ -188,6 +189,7 @@ func (h *ResumeHandler) SetDefaultResume(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "Failed to update previous default resume", http.StatusInternalServerError)
 			return
 		}
+		h.deleteResumeCacheFiles([]string{prevDefault.ResumeID})
 	}
 
 	newDefault, err := h.Repo.GetResumeByID(r.Context(), decodedResumeID, userID)
@@ -201,6 +203,7 @@ func (h *ResumeHandler) SetDefaultResume(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Failed to update default resume", http.StatusInternalServerError)
 		return
 	}
+	h.deleteResumeCacheFiles([]string{newDefault.ResumeID})
 	newDefault.ResumeID = req.ResumeID
 	newDefault.Profile.ProfileID = h.EncodeID(newDefault.Profile.ProfileID)
 
