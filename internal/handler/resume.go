@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/dfloo/dfloo-profile-go/internal/latex"
@@ -376,7 +377,10 @@ func (h *ResumeHandler) triggerAsyncResumePDFGeneration(resume *model.Resume) {
 }
 
 func (h *ResumeHandler) getOrGenerateResumePDF(resume *model.Resume) ([]byte, error) {
-	cacheFilePath := h.resumeCacheFilePath(resume.ResumeID)
+	inflightKey, cacheFilePath := h.resumeCacheIdentity(resume)
+	if inflightKey == "" || cacheFilePath == "" {
+		return nil, errors.New("resume cache identity is invalid")
+	}
 
 	pdfBytes, err := os.ReadFile(cacheFilePath)
 	if err == nil {
@@ -386,10 +390,10 @@ func (h *ResumeHandler) getOrGenerateResumePDF(resume *model.Resume) ([]byte, er
 		return nil, err
 	}
 
-	generation, owner := h.registerInflightGeneration(resume.ResumeID)
+	generation, owner := h.registerInflightGeneration(inflightKey)
 	if owner {
 		generation.err = h.generateResumePDF(resume)
-		h.completeInflightGeneration(resume.ResumeID)
+		h.completeInflightGeneration(inflightKey)
 	} else {
 		<-generation.done
 	}
@@ -402,17 +406,21 @@ func (h *ResumeHandler) getOrGenerateResumePDF(resume *model.Resume) ([]byte, er
 }
 
 func (h *ResumeHandler) generateResumePDFWithInflight(resume *model.Resume) error {
-	cacheFilePath := h.resumeCacheFilePath(resume.ResumeID)
+	inflightKey, cacheFilePath := h.resumeCacheIdentity(resume)
+	if inflightKey == "" || cacheFilePath == "" {
+		return errors.New("resume cache identity is invalid")
+	}
+
 	if _, err := os.Stat(cacheFilePath); err == nil {
 		return nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 
-	generation, owner := h.registerInflightGeneration(resume.ResumeID)
+	generation, owner := h.registerInflightGeneration(inflightKey)
 	if owner {
 		generation.err = h.generateResumePDF(resume)
-		h.completeInflightGeneration(resume.ResumeID)
+		h.completeInflightGeneration(inflightKey)
 		return generation.err
 	}
 
@@ -464,7 +472,10 @@ func (h *ResumeHandler) generateResumePDF(resume *model.Resume) error {
 		return err
 	}
 
-	cacheFilePath := h.resumeCacheFilePath(resume.ResumeID)
+	_, cacheFilePath := h.resumeCacheIdentity(resume)
+	if cacheFilePath == "" {
+		return errors.New("resume cache identity is invalid")
+	}
 	tempCacheFilePath := cacheFilePath + ".tmp"
 	if err := os.WriteFile(tempCacheFilePath, pdfBytes, 0644); err != nil {
 		return err
@@ -477,7 +488,7 @@ func (h *ResumeHandler) generateResumePDF(resume *model.Resume) error {
 	return nil
 }
 
-func (h *ResumeHandler) registerInflightGeneration(resumeID string) (*resumePDFGeneration, bool) {
+func (h *ResumeHandler) registerInflightGeneration(inflightKey string) (*resumePDFGeneration, bool) {
 	h.inflightMu.Lock()
 	defer h.inflightMu.Unlock()
 
@@ -485,20 +496,20 @@ func (h *ResumeHandler) registerInflightGeneration(resumeID string) (*resumePDFG
 		h.inflightPDF = make(map[string]*resumePDFGeneration)
 	}
 
-	if generation, exists := h.inflightPDF[resumeID]; exists {
+	if generation, exists := h.inflightPDF[inflightKey]; exists {
 		return generation, false
 	}
 
 	generation := &resumePDFGeneration{done: make(chan struct{})}
-	h.inflightPDF[resumeID] = generation
+	h.inflightPDF[inflightKey] = generation
 	return generation, true
 }
 
-func (h *ResumeHandler) completeInflightGeneration(resumeID string) {
+func (h *ResumeHandler) completeInflightGeneration(inflightKey string) {
 	h.inflightMu.Lock()
-	generation, exists := h.inflightPDF[resumeID]
+	generation, exists := h.inflightPDF[inflightKey]
 	if exists {
-		delete(h.inflightPDF, resumeID)
+		delete(h.inflightPDF, inflightKey)
 	}
 	h.inflightMu.Unlock()
 
@@ -511,18 +522,54 @@ func (h *ResumeHandler) resumeCacheFilePath(resumeID string) string {
 	return filepath.Join(h.getCacheDir(), safeResumeCacheFilename(resumeID))
 }
 
+func (h *ResumeHandler) resumeCacheIdentity(resume *model.Resume) (string, string) {
+	if resume == nil || resume.ResumeID == "" {
+		return "", ""
+	}
+
+	if resume.Updated.IsZero() {
+		return resume.ResumeID, h.resumeCacheFilePath(resume.ResumeID)
+	}
+
+	versionToken := strconv.FormatInt(resume.Updated.UTC().UnixNano(), 10)
+	cacheFilename := safeVersionedResumeCacheFilename(resume.ResumeID, versionToken)
+	inflightKey := resume.ResumeID + "|" + versionToken
+	return inflightKey, filepath.Join(h.getCacheDir(), cacheFilename)
+}
+
 func (h *ResumeHandler) deleteResumeCacheFiles(resumeIDs []string) {
 	for _, resumeID := range resumeIDs {
-		cacheFilePath := h.resumeCacheFilePath(resumeID)
-		if err := os.Remove(cacheFilePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			log.Printf("failed to remove resume cache file for resumeID=%s: %v", resumeID, err)
+		legacyCacheFilePath := h.resumeCacheFilePath(resumeID)
+		if err := os.Remove(legacyCacheFilePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Printf("failed to remove legacy resume cache file for resumeID=%s: %v", resumeID, err)
+		}
+
+		versionedPattern := filepath.Join(h.getCacheDir(), safeResumeIDPrefix(resumeID)+"_*.pdf")
+		versionedCacheFilePaths, err := filepath.Glob(versionedPattern)
+		if err != nil {
+			log.Printf("failed to list versioned resume cache files for resumeID=%s: %v", resumeID, err)
+			continue
+		}
+
+		for _, cacheFilePath := range versionedCacheFilePaths {
+			if err := os.Remove(cacheFilePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				log.Printf("failed to remove versioned resume cache file for resumeID=%s path=%s: %v", resumeID, cacheFilePath, err)
+			}
 		}
 	}
 }
 
 func safeResumeCacheFilename(resumeID string) string {
+	return safeResumeIDPrefix(resumeID) + ".pdf"
+}
+
+func safeVersionedResumeCacheFilename(resumeID, versionToken string) string {
+	return safeResumeIDPrefix(resumeID) + "_" + versionToken + ".pdf"
+}
+
+func safeResumeIDPrefix(resumeID string) string {
 	hash := sha256.Sum256([]byte(resumeID))
-	return hex.EncodeToString(hash[:]) + ".pdf"
+	return hex.EncodeToString(hash[:])
 }
 
 func (h *ResumeHandler) getCacheDir() string {
