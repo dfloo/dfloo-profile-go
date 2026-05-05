@@ -167,6 +167,59 @@ func TestFormatExperienceEducationAndSkills(t *testing.T) {
 	}
 }
 
+func TestResolvedFontSpec(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty string defaults", input: "", want: ""},
+		{name: "lmodern alias defaults", input: "lmodern", want: ""},
+		{name: "times", input: "times", want: `\usepackage{mathptmx}`},
+		{name: "palatino", input: "palatino", want: `\usepackage{mathpazo}`},
+		{name: "charter", input: "charter", want: `\usepackage{charter}`},
+		{name: "helvetica", input: "helvetica", want: "\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}"},
+		{name: "unknown key falls back", input: "comic-sans", want: ""},
+		{name: "injection attempt falls back", input: `}\usepackage{shellesc}\directlua{os.execute("id")}%`, want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolvedFontSpec(tc.input)
+			if got != tc.want {
+				t.Errorf("resolvedFontSpec(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormatTemplateData_FontFamily(t *testing.T) {
+	base := &model.Resume{
+		Profile: model.Profile{FirstName: "Jane", LastName: "Doe"},
+	}
+	tests := []struct {
+		name       string
+		fontFamily string
+		want       string
+	}{
+		{name: "known font maps to package snippet", fontFamily: "times", want: `\usepackage{mathptmx}`},
+		{name: "lmodern resolves to empty", fontFamily: "lmodern", want: ""},
+		{name: "unknown font resolves to empty", fontFamily: "not-a-font", want: ""},
+		{name: "empty resolves to empty", fontFamily: "", want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := *base
+			r.TemplateSettings = model.TemplateSettings{FontFamily: tc.fontFamily}
+			got := FormatTemplateData(&r)
+			if got.FontFamily != tc.want {
+				t.Errorf("FontFamily = %q, want %q", got.FontFamily, tc.want)
+			}
+		})
+	}
+}
+
 func TestFormatTemplateData(t *testing.T) {
 	updated := time.Date(2026, time.February, 23, 12, 30, 0, 0, time.UTC)
 	resume := &model.Resume{
@@ -207,8 +260,8 @@ func TestFormatTemplateData(t *testing.T) {
 	if got.Summary != "Built 100\\% of core" {
 		t.Errorf("Summary = %q, want escaped summary", got.Summary)
 	}
-	if got.FontFamily != "lmodern" {
-		t.Errorf("FontFamily = %q, want %q", got.FontFamily, "lmodern")
+	if got.FontFamily != "" {
+		t.Errorf("FontFamily = %q, want %q", got.FontFamily, "")
 	}
 	if len(got.Skills) != 2 || got.Skills[1] != "C\\#" {
 		t.Errorf("Skills not formatted as expected: %#v", got.Skills)

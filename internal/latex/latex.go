@@ -90,6 +90,43 @@ func ConvertToPDF(filePath string) ([]byte, error) {
 	return pdfBytes, nil
 }
 
+// supportedFonts maps the API slug to the LaTeX snippet inserted into the preamble.
+// Values are trusted constants (never user-controlled), so they can be emitted verbatim.
+// Limited to fonts available via texlive-fonts-recommended + texlive-latex-recommended (PSNFSS).
+var supportedFonts = map[string]string{
+	"":          "",
+	"lmodern":   "",
+	"times":     `\usepackage[T1]{fontenc}\usepackage{mathptmx}`,
+	"palatino":  `\usepackage[T1]{fontenc}\usepackage{mathpazo}`,
+	"charter":   `\usepackage[T1]{fontenc}\usepackage{charter}`,
+	"helvetica": "\\usepackage[T1]{fontenc}\n\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}",
+}
+
+func resolvedFontSpec(apiKey string) string {
+	fontName, ok := supportedFonts[apiKey]
+	if !ok {
+		return ""
+	}
+	return fontName
+}
+
+// FontOption describes a supported font family for resume PDF generation.
+type FontOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// SupportedFonts returns the ordered list of supported font families.
+func SupportedFonts() []FontOption {
+	return []FontOption{
+		{Value: "lmodern", Label: "Latin Modern (default)"},
+		{Value: "times", Label: "Times"},
+		{Value: "palatino", Label: "Palatino"},
+		{Value: "charter", Label: "Charter"},
+		{Value: "helvetica", Label: "Helvetica"},
+	}
+}
+
 func FormatTemplateData(resume *model.Resume) TemplateData {
 	return TemplateData{
 		Resume:     *resume,
@@ -100,7 +137,7 @@ func FormatTemplateData(resume *model.Resume) TemplateData {
 		Experience: FormatExperience(resume.Experience),
 		Education:  FormatEducation(resume.Education),
 		Skills:     FormatSkills(resume.Skills),
-		FontFamily: resume.TemplateSettings.FontFamily,
+		FontFamily: resolvedFontSpec(resume.TemplateSettings.FontFamily),
 	}
 }
 
