@@ -175,10 +175,10 @@ func TestResolvedFontSpec(t *testing.T) {
 	}{
 		{name: "empty string defaults", input: "", want: ""},
 		{name: "lmodern alias defaults", input: "lmodern", want: ""},
-		{name: "times", input: "times", want: `\usepackage{mathptmx}`},
-		{name: "palatino", input: "palatino", want: `\usepackage{mathpazo}`},
-		{name: "charter", input: "charter", want: `\usepackage{charter}`},
-		{name: "helvetica", input: "helvetica", want: "\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}"},
+		{name: "times", input: "times", want: `\usepackage[T1]{fontenc}\usepackage{mathptmx}`},
+		{name: "palatino", input: "palatino", want: `\usepackage[T1]{fontenc}\usepackage{mathpazo}`},
+		{name: "charter", input: "charter", want: `\usepackage[T1]{fontenc}\usepackage{charter}`},
+		{name: "helvetica", input: "helvetica", want: "\\usepackage[T1]{fontenc}\n\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}"},
 		{name: "unknown key falls back", input: "comic-sans", want: ""},
 		{name: "injection attempt falls back", input: `}\usepackage{shellesc}\directlua{os.execute("id")}%`, want: ""},
 	}
@@ -202,7 +202,7 @@ func TestFormatTemplateData_FontFamily(t *testing.T) {
 		fontFamily string
 		want       string
 	}{
-		{name: "known font maps to package snippet", fontFamily: "times", want: `\usepackage{mathptmx}`},
+		{name: "known font maps to package snippet", fontFamily: "times", want: `\usepackage[T1]{fontenc}\usepackage{mathptmx}`},
 		{name: "lmodern resolves to empty", fontFamily: "lmodern", want: ""},
 		{name: "unknown font resolves to empty", fontFamily: "not-a-font", want: ""},
 		{name: "empty resolves to empty", fontFamily: "", want: ""},
