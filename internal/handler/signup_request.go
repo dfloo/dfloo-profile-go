@@ -12,17 +12,17 @@ import (
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
 )
 
-type InvitationRequestHandler struct {
-	Repo         repository.InvitationRequestRepository
+type SignupRequestHandler struct {
+	Repo         repository.SignupRequestRepository
 	EmailService *email.Service
 }
 
-func NewInvitationRequestHandler(repo repository.InvitationRequestRepository, emailSvc *email.Service) *InvitationRequestHandler {
-	return &InvitationRequestHandler{Repo: repo, EmailService: emailSvc}
+func NewSignupRequestHandler(repo repository.SignupRequestRepository, emailSvc *email.Service) *SignupRequestHandler {
+	return &SignupRequestHandler{Repo: repo, EmailService: emailSvc}
 }
 
-func (h *InvitationRequestHandler) PostInvitationRequest(w http.ResponseWriter, r *http.Request) {
-	var req model.InvitationRequest
+func (h *SignupRequestHandler) PostSignupRequest(w http.ResponseWriter, r *http.Request) {
+	var req model.SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -33,19 +33,19 @@ func (h *InvitationRequestHandler) PostInvitationRequest(w http.ResponseWriter, 
 		return
 	}
 
-	if err := h.Repo.CreateInvitationRequest(r.Context(), &req); err != nil {
-		http.Error(w, "Failed to save invitation request", http.StatusInternalServerError)
+	if err := h.Repo.CreateSignupRequest(r.Context(), &req); err != nil {
+		http.Error(w, "Failed to save signup request", http.StatusInternalServerError)
 		return
 	}
 
 	if err := h.EmailService.Send(
-		fmt.Sprintf("Invitation Request from %s", html.EscapeString(req.Name)),
+		fmt.Sprintf("Signup Request from %s", html.EscapeString(req.Name)),
 		fmt.Sprintf(
 			"<p><strong>Name:</strong> %s</p><p><strong>Email:</strong> %s</p><p><strong>Reason:</strong></p><p>%s</p>",
 			html.EscapeString(req.Name), html.EscapeString(req.Email), html.EscapeString(req.Reason),
 		),
 	); err != nil {
-		log.Printf("failed to send invitation request email: %v", err)
+		log.Printf("failed to send signup request email: %v", err)
 	}
 
 	w.WriteHeader(http.StatusCreated)

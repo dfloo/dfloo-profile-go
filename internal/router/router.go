@@ -23,8 +23,8 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 	jobApplicationHandler := handler.NewJobApplicationHandler(jobApplicationRepo)
 	meetingRequestRepo := repository.NewDBMeetingRequestRepository(pool)
 	meetingRequestHandler := handler.NewMeetingRequestHandler(meetingRequestRepo, emailSvc)
-	invitationRequestRepo := repository.NewDBInvitationRequestRepository(pool)
-	invitationRequestHandler := handler.NewInvitationRequestHandler(invitationRequestRepo, emailSvc)
+	signupRequestRepo := repository.NewDBSignupRequestRepository(pool)
+	signupRequestHandler := handler.NewSignupRequestHandler(signupRequestRepo, emailSvc)
 	healthHandler := handler.NewHealthHandler(pool)
 	f1Repo := repository.NewDBF1Repository(pool)
 	f1Handler := handler.NewF1Handler(f1Repo)
@@ -44,12 +44,12 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
-	mux.HandleFunc("/api/invitation-requests", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/signup-requests", func(w http.ResponseWriter, r *http.Request) {
 		middleware.Core(
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.Method {
 				case http.MethodPost:
-					invitationRequestHandler.PostInvitationRequest(w, r)
+					signupRequestHandler.PostSignupRequest(w, r)
 				default:
 					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 				}

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-type InvitationRequest struct {
+type SignupRequest struct {
 	Name    string    `json:"name"`
 	Email   string    `json:"email"`
 	Reason  string    `json:"reason"`
