@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/dfloo/dfloo-profile-go/internal/email"
 	"github.com/dfloo/dfloo-profile-go/internal/handler"
 	"github.com/dfloo/dfloo-profile-go/internal/middleware"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
@@ -12,17 +13,49 @@ import (
 func New(pool *pgxpool.Pool) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	emailSvc := email.NewService()
+
 	profileRepo := repository.NewDBProfileRepository(pool)
 	profileHandler := handler.NewProfileHandler(profileRepo)
 	resumeRepo := repository.NewDBResumeRepository(pool)
 	resumeHandler := handler.NewResumeHandler(resumeRepo)
 	jobApplicationRepo := repository.NewDBJobApplicationRepository(pool)
 	jobApplicationHandler := handler.NewJobApplicationHandler(jobApplicationRepo)
+	meetingRequestRepo := repository.NewDBMeetingRequestRepository(pool)
+	meetingRequestHandler := handler.NewMeetingRequestHandler(meetingRequestRepo, emailSvc.Send)
+	signupRequestRepo := repository.NewDBSignupRequestRepository(pool)
+	signupRequestHandler := handler.NewSignupRequestHandler(signupRequestRepo, emailSvc.Send)
 	healthHandler := handler.NewHealthHandler(pool)
 	f1Repo := repository.NewDBF1Repository(pool)
 	f1Handler := handler.NewF1Handler(f1Repo)
 
 	mux.HandleFunc("GET /health", healthHandler.HealthCheck)
+
+	mux.HandleFunc("/api/meeting-requests", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodPost:
+					meetingRequestHandler.PostMeetingRequest(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/signup-requests", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodPost:
+					signupRequestHandler.PostSignupRequest(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
 
 	mux.HandleFunc("/api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		middleware.CoreAuthenticated(

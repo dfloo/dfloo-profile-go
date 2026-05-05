@@ -67,6 +67,16 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: CLIENT_ORIGIN
+            - name: RESEND_FROM_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: RESEND_FROM_EMAIL
+            - name: NOTIFY_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NOTIFY_EMAIL
           command:
             - "sh"
             - "-c"
@@ -74,6 +84,7 @@ spec:
               export PGDATABASE=$(cat /mnt/secrets-store/postgres-db)
               export PGUSER=$(cat /mnt/secrets-store/postgres-user)
               export PGPASSWORD=$(cat /mnt/secrets-store/postgres-password)
+              export RESEND_API_KEY=$(cat /mnt/secrets-store/resend-api-key)
               mkdir -p "$HOME" "$TEXMFCACHE" "$TEXMFVAR" /tmp/tex-warmup
               cat > /tmp/tex-warmup/warmup.tex <<'EOF'
               \documentclass{article}

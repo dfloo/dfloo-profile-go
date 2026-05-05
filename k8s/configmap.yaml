@@ -7,3 +7,5 @@ data:
   AUTH0_AUDIENCE: "https://api.dfloo-profile.com"
   AUTH0_DOMAIN: "dev-70prsgyhzrufsyhj.us.auth0.com"
   CLIENT_ORIGIN: "https://dfloo-profile.com"
+  RESEND_FROM_EMAIL: "noreply@dfloo-profile.com"
+  NOTIFY_EMAIL: "devin.p.flood@gmail.com"
