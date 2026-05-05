@@ -2,7 +2,10 @@ module github.com/dfloo/dfloo-profile-go
 
 go 1.24.3
 
-require github.com/auth0/go-jwt-middleware/v2 v2.3.0
+require (
+	github.com/auth0/go-jwt-middleware/v2 v2.3.0
+	github.com/resend/resend-go/v2 v2.28.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
