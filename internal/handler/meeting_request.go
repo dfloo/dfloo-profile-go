@@ -7,18 +7,17 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/dfloo/dfloo-profile-go/internal/email"
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
 )
 
 type MeetingRequestHandler struct {
-	Repo         repository.MeetingRequestRepository
-	EmailService *email.Service
+	Repo      repository.MeetingRequestRepository
+	SendEmail func(subject, html string) error
 }
 
-func NewMeetingRequestHandler(repo repository.MeetingRequestRepository, emailSvc *email.Service) *MeetingRequestHandler {
-	return &MeetingRequestHandler{Repo: repo, EmailService: emailSvc}
+func NewMeetingRequestHandler(repo repository.MeetingRequestRepository, sendEmail func(string, string) error) *MeetingRequestHandler {
+	return &MeetingRequestHandler{Repo: repo, SendEmail: sendEmail}
 }
 
 func (h *MeetingRequestHandler) PostMeetingRequest(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +37,7 @@ func (h *MeetingRequestHandler) PostMeetingRequest(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if err := h.EmailService.Send(
+	if err := h.SendEmail(
 		fmt.Sprintf("Meeting Request from %s", html.EscapeString(req.Name)),
 		fmt.Sprintf(
 			"<p><strong>Name:</strong> %s</p><p><strong>Email:</strong> %s</p><p><strong>Message:</strong></p><p>%s</p>",

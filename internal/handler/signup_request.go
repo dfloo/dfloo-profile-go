@@ -7,18 +7,17 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/dfloo/dfloo-profile-go/internal/email"
 	"github.com/dfloo/dfloo-profile-go/internal/model"
 	"github.com/dfloo/dfloo-profile-go/internal/repository"
 )
 
 type SignupRequestHandler struct {
-	Repo         repository.SignupRequestRepository
-	EmailService *email.Service
+	Repo      repository.SignupRequestRepository
+	SendEmail func(subject, html string) error
 }
 
-func NewSignupRequestHandler(repo repository.SignupRequestRepository, emailSvc *email.Service) *SignupRequestHandler {
-	return &SignupRequestHandler{Repo: repo, EmailService: emailSvc}
+func NewSignupRequestHandler(repo repository.SignupRequestRepository, sendEmail func(string, string) error) *SignupRequestHandler {
+	return &SignupRequestHandler{Repo: repo, SendEmail: sendEmail}
 }
 
 func (h *SignupRequestHandler) PostSignupRequest(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +37,7 @@ func (h *SignupRequestHandler) PostSignupRequest(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err := h.EmailService.Send(
+	if err := h.SendEmail(
 		fmt.Sprintf("Signup Request from %s", html.EscapeString(req.Name)),
 		fmt.Sprintf(
 			"<p><strong>Name:</strong> %s</p><p><strong>Email:</strong> %s</p><p><strong>Reason:</strong></p><p>%s</p>",
