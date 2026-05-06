@@ -85,6 +85,7 @@ spec:
               export PGUSER=$(cat /mnt/secrets-store/postgres-user)
               export PGPASSWORD=$(cat /mnt/secrets-store/postgres-password)
               export RESEND_API_KEY=$(cat /mnt/secrets-store/resend-api-key)
+              export ANTHROPIC_API_KEY=$(cat /mnt/secrets-store/anthropic-api-key)
               mkdir -p "$HOME" "$TEXMFCACHE" "$TEXMFVAR" /tmp/tex-warmup
               cat > /tmp/tex-warmup/warmup.tex <<'EOF'
               \documentclass{article}
