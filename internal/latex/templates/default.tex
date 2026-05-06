@@ -11,6 +11,7 @@
 {{- end}}
 
 \pagestyle{empty}
+\setlength{\emergencystretch}{3em}
 \titlespacing*{\section}{0pt}{0.75em}{0.75em}
 
 \newcommand{\SocialAccounts}{
@@ -34,6 +35,7 @@
 
 \newcommand{\SkillsSection}{
     {{ if len .Skills }}
+        \vspace{-1em}
         \begin{multicols}{2}
             \begin{itemize}[itemsep=0pt, parsep=0pt]
                 {{range .Skills}}\item {{ . }}{{end}}
@@ -48,7 +50,7 @@
     \end{tabular*}
     {{if len .Description}} \hspace*{0.5em}\textit{\fontsize{10}{10}\selectfont {{ .Description }} } {{end}}
     \vspace{-0.5em}
-    \begin{itemize}[itemsep=0pt, parsep=0pt]
+    \begin{itemize}[itemsep=5pt, parsep=0pt]
         {{range .BulletPoints }}\item {{ . }}{{end}}
     \end{itemize}
     {{end}}
