@@ -589,6 +589,11 @@ func (h *ResumeHandler) getCacheDir() string {
 func (h *ResumeHandler) TailorResume(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	if h.ClaudeClient == nil {
+		http.Error(w, "Service unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	userID := h.GetUserID(r.Context())
 	if userID == "" {
 		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
@@ -612,7 +617,13 @@ func (h *ResumeHandler) TailorResume(w http.ResponseWriter, r *http.Request) {
 		Company        string `json:"company"`
 		Role           string `json:"role"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if dec.More() {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}

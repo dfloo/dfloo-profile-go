@@ -67,20 +67,20 @@ func TestTailorResume(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		path         string
-		body         string
-		userID       string
-		setupRepo    func(*MockResumeRepository)
-		setupClaude  func(*MockClaudeClient)
-		wantStatus   int
-		checkBody    func(t *testing.T, body []byte)
+		name        string
+		resumeID    string
+		body        string
+		userID      string
+		setupRepo   func(*MockResumeRepository)
+		setupClaude func(*MockClaudeClient)
+		wantStatus  int
+		checkBody   func(t *testing.T, body []byte)
 	}{
 		{
-			name:   "success",
-			path:   "/api/resumes/encoded/tailor",
-			body:   `{"jobDescription":"Build fintech services","company":"FinCo","role":"Senior Engineer"}`,
-			userID: "user1",
+			name:     "success",
+			resumeID: "encoded",
+			body:     `{"jobDescription":"Build fintech services","company":"FinCo","role":"Senior Engineer"}`,
+			userID:   "user1",
 			setupRepo: func(m *MockResumeRepository) {
 				m.GetResumeByIDFunc = func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
 					return mockResumeWithExperience(), nil
@@ -122,46 +122,64 @@ func TestTailorResume(t *testing.T) {
 			},
 		},
 		{
-			name:       "no user id",
-			path:       "/api/resumes/encoded/tailor",
-			body:       `{"jobDescription":"Build fintech services"}`,
-			userID:     "",
-			setupRepo:  func(m *MockResumeRepository) {},
+			name:        "no user id",
+			resumeID:    "encoded",
+			body:        `{"jobDescription":"Build fintech services"}`,
+			userID:      "",
+			setupRepo:   func(m *MockResumeRepository) {},
 			setupClaude: func(m *MockClaudeClient) {},
-			wantStatus: http.StatusUnauthorized,
+			wantStatus:  http.StatusUnauthorized,
 		},
 		{
-			name:       "invalid json body",
-			path:       "/api/resumes/encoded/tailor",
-			body:       `not json`,
-			userID:     "user1",
-			setupRepo:  func(m *MockResumeRepository) {},
+			name:        "invalid json body",
+			resumeID:    "encoded",
+			body:        `not json`,
+			userID:      "user1",
+			setupRepo:   func(m *MockResumeRepository) {},
 			setupClaude: func(m *MockClaudeClient) {},
-			wantStatus: http.StatusBadRequest,
+			wantStatus:  http.StatusBadRequest,
 		},
 		{
-			name:       "missing job description",
-			path:       "/api/resumes/encoded/tailor",
-			body:       `{"company":"FinCo","role":"Engineer"}`,
-			userID:     "user1",
-			setupRepo:  func(m *MockResumeRepository) {},
+			name:        "unknown fields rejected",
+			resumeID:    "encoded",
+			body:        `{"jobDescription":"Build fintech services","extraField":"ignored"}`,
+			userID:      "user1",
+			setupRepo:   func(m *MockResumeRepository) {},
 			setupClaude: func(m *MockClaudeClient) {},
-			wantStatus: http.StatusBadRequest,
+			wantStatus:  http.StatusBadRequest,
 		},
 		{
-			name:       "decode id error",
-			path:       "/api/resumes/invalid/tailor",
-			body:       `{"jobDescription":"Build fintech services"}`,
-			userID:     "user1",
-			setupRepo:  func(m *MockResumeRepository) {},
+			name:        "trailing json rejected",
+			resumeID:    "encoded",
+			body:        `{"jobDescription":"Build fintech services"}{}`,
+			userID:      "user1",
+			setupRepo:   func(m *MockResumeRepository) {},
 			setupClaude: func(m *MockClaudeClient) {},
-			wantStatus: http.StatusBadRequest,
+			wantStatus:  http.StatusBadRequest,
 		},
 		{
-			name:   "resume not found",
-			path:   "/api/resumes/encoded/tailor",
-			body:   `{"jobDescription":"Build fintech services"}`,
-			userID: "user1",
+			name:        "missing job description",
+			resumeID:    "encoded",
+			body:        `{"company":"FinCo","role":"Engineer"}`,
+			userID:      "user1",
+			setupRepo:   func(m *MockResumeRepository) {},
+			setupClaude: func(m *MockClaudeClient) {},
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "decode id error",
+			resumeID:    "invalid",
+			body:        `{"jobDescription":"Build fintech services"}`,
+			userID:      "user1",
+			setupRepo:   func(m *MockResumeRepository) {},
+			setupClaude: func(m *MockClaudeClient) {},
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:     "resume not found",
+			resumeID: "encoded",
+			body:     `{"jobDescription":"Build fintech services"}`,
+			userID:   "user1",
 			setupRepo: func(m *MockResumeRepository) {
 				m.GetResumeByIDFunc = func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
 					return nil, errors.New("not found")
@@ -171,10 +189,10 @@ func TestTailorResume(t *testing.T) {
 			wantStatus:  http.StatusNotFound,
 		},
 		{
-			name:   "claude error",
-			path:   "/api/resumes/encoded/tailor",
-			body:   `{"jobDescription":"Build fintech services"}`,
-			userID: "user1",
+			name:     "claude error",
+			resumeID: "encoded",
+			body:     `{"jobDescription":"Build fintech services"}`,
+			userID:   "user1",
 			setupRepo: func(m *MockResumeRepository) {
 				m.GetResumeByIDFunc = func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
 					return mockResumeWithExperience(), nil
@@ -188,10 +206,10 @@ func TestTailorResume(t *testing.T) {
 			wantStatus: http.StatusBadGateway,
 		},
 		{
-			name:   "claude experience length mismatch",
-			path:   "/api/resumes/encoded/tailor",
-			body:   `{"jobDescription":"Build fintech services"}`,
-			userID: "user1",
+			name:     "claude experience length mismatch",
+			resumeID: "encoded",
+			body:     `{"jobDescription":"Build fintech services"}`,
+			userID:   "user1",
 			setupRepo: func(m *MockResumeRepository) {
 				m.GetResumeByIDFunc = func(ctx context.Context, resumeID, userID string) (*model.Resume, error) {
 					return mockResumeWithExperience(), nil
@@ -219,8 +237,8 @@ func TestTailorResume(t *testing.T) {
 
 			h := createTestTailorHandler(t, mockRepo, mockClaude)
 
-			req := testutil.CreateRequestWithBody(http.MethodPost, tc.path, tc.body, tc.userID)
-			req.SetPathValue("resumeId", extractResumeIDFromPath(tc.path))
+			req := testutil.CreateRequestWithBody(http.MethodPost, "/api/resumes/tailor/"+tc.resumeID, tc.body, tc.userID)
+			req.SetPathValue("resumeId", tc.resumeID)
 
 			rr := httptest.NewRecorder()
 			h.TailorResume(rr, req)
@@ -236,36 +254,17 @@ func TestTailorResume(t *testing.T) {
 	}
 }
 
-// extractResumeIDFromPath extracts the resumeId segment from paths like /api/resumes/{resumeId}/tailor.
-func extractResumeIDFromPath(path string) string {
-	parts := splitPath(path)
-	for i, p := range parts {
-		if p == "resumes" && i+2 < len(parts) {
-			return parts[i+1]
-		}
-	}
-	return ""
-}
+func TestTailorResume_NilClient(t *testing.T) {
+	h := createTestResumeHandler(t, &MockResumeRepository{})
+	// ClaudeClient intentionally left nil
 
-func splitPath(path string) []string {
-	var parts []string
-	for _, p := range splitOnSlash(path) {
-		if p != "" {
-			parts = append(parts, p)
-		}
-	}
-	return parts
-}
+	req := testutil.CreateRequestWithBody(http.MethodPost, "/api/resumes/tailor/encoded", `{"jobDescription":"x"}`, "user1")
+	req.SetPathValue("resumeId", "encoded")
 
-func splitOnSlash(s string) []string {
-	var parts []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '/' {
-			parts = append(parts, s[start:i])
-			start = i + 1
-		}
+	rr := httptest.NewRecorder()
+	h.TailorResume(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusInternalServerError)
 	}
-	parts = append(parts, s[start:])
-	return parts
 }
