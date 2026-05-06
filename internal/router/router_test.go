@@ -256,6 +256,44 @@ func TestNew_F1EventsHandler(t *testing.T) {
 	})
 }
 
+func TestNew_FontOptionsHandler(t *testing.T) {
+	t.Setenv("CLIENT_ORIGIN", "http://localhost:3000")
+
+	mux := New(nil)
+
+	t.Run("GET returns 200 with font options", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/resumes/fonts", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Fatalf("Content-Type = %q, want %q", ct, "application/json")
+		}
+		var opts []map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &opts); err != nil {
+			t.Fatalf("body is not valid JSON array: %v", err)
+		}
+		if len(opts) == 0 {
+			t.Fatalf("expected non-empty font options")
+		}
+	})
+
+	t.Run("non-GET methods return method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/resumes/fonts", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+		}
+	})
+}
+
 func TestNew_ProtectedDownloadRouteHandlesPreflight(t *testing.T) {
 	t.Setenv("AUTH0_DOMAIN", "example.auth0.com")
 	t.Setenv("AUTH0_AUDIENCE", "https://api.example.com")

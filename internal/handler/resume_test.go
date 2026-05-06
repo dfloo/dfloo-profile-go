@@ -933,6 +933,45 @@ func TestDownloadGuestResumePDF_ConvertError(t *testing.T) {
 	}
 }
 
+func TestGetFontOptions(t *testing.T) {
+	handler := createTestResumeHandler(t, &MockResumeRepository{})
+	req := httptest.NewRequest(http.MethodGet, "/resumes/fonts", nil)
+	w := httptest.NewRecorder()
+
+	handler.GetFontOptions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want %q", ct, "application/json")
+	}
+
+	var opts []struct {
+		Value string `json:"value"`
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&opts); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	want := []struct{ Value, Label string }{
+		{"lmodern", "Latin Modern (default)"},
+		{"times", "Times"},
+		{"palatino", "Palatino"},
+		{"charter", "Charter"},
+		{"helvetica", "Helvetica"},
+	}
+	if len(opts) != len(want) {
+		t.Fatalf("len(opts) = %d, want %d", len(opts), len(want))
+	}
+	for i, w := range want {
+		if opts[i].Value != w.Value || opts[i].Label != w.Label {
+			t.Errorf("opts[%d] = {%q, %q}, want {%q, %q}", i, opts[i].Value, opts[i].Label, w.Value, w.Label)
+		}
+	}
+}
+
 func TestResumeCacheFilePath_SanitizesResumeID(t *testing.T) {
 	handler := createTestResumeHandler(t, &MockResumeRepository{})
 	handler.CacheDir = t.TempDir()

@@ -90,41 +90,43 @@ func ConvertToPDF(filePath string) ([]byte, error) {
 	return pdfBytes, nil
 }
 
-// supportedFonts maps the API slug to the LaTeX snippet inserted into the preamble.
-// Values are trusted constants (never user-controlled), so they can be emitted verbatim.
-// Limited to fonts available via texlive-fonts-recommended + texlive-latex-recommended (PSNFSS).
-var supportedFonts = map[string]string{
-	"":          "",
-	"lmodern":   "",
-	"times":     `\usepackage[T1]{fontenc}\usepackage{mathptmx}`,
-	"palatino":  `\usepackage[T1]{fontenc}\usepackage{mathpazo}`,
-	"charter":   `\usepackage[T1]{fontenc}\usepackage{charter}`,
-	"helvetica": "\\usepackage[T1]{fontenc}\n\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}",
-}
-
-func resolvedFontSpec(apiKey string) string {
-	fontName, ok := supportedFonts[apiKey]
-	if !ok {
-		return ""
-	}
-	return fontName
-}
-
 // FontOption describes a supported font family for resume PDF generation.
+// spec holds the LaTeX preamble snippet (trusted constant, never user-controlled).
 type FontOption struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
+	spec  string
 }
 
-// SupportedFonts returns the ordered list of supported font families.
-func SupportedFonts() []FontOption {
-	return []FontOption{
-		{Value: "lmodern", Label: "Latin Modern (default)"},
-		{Value: "times", Label: "Times"},
-		{Value: "palatino", Label: "Palatino"},
-		{Value: "charter", Label: "Charter"},
-		{Value: "helvetica", Label: "Helvetica"},
+// fontOptions is the single source of truth for supported fonts: ordering, labels, and LaTeX snippets.
+// Limited to fonts available via texlive-fonts-recommended + texlive-latex-recommended (PSNFSS).
+var fontOptions = []FontOption{
+	{Value: "lmodern", Label: "Latin Modern (default)", spec: ""},
+	{Value: "times", Label: "Times", spec: `\usepackage[T1]{fontenc}\usepackage{mathptmx}`},
+	{Value: "palatino", Label: "Palatino", spec: `\usepackage[T1]{fontenc}\usepackage{mathpazo}`},
+	{Value: "charter", Label: "Charter", spec: `\usepackage[T1]{fontenc}\usepackage{charter}`},
+	{Value: "helvetica", Label: "Helvetica", spec: "\\usepackage[T1]{fontenc}\n\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}"},
+}
+
+func resolvedFontSpec(apiKey string) string {
+	if apiKey == "" {
+		return ""
 	}
+	for _, f := range fontOptions {
+		if f.Value == apiKey {
+			return f.spec
+		}
+	}
+	return ""
+}
+
+// SupportedFonts returns the ordered list of supported font families for the API.
+func SupportedFonts() []FontOption {
+	result := make([]FontOption, len(fontOptions))
+	for i, f := range fontOptions {
+		result[i] = FontOption{Value: f.Value, Label: f.Label}
+	}
+	return result
 }
 
 func FormatTemplateData(resume *model.Resume) TemplateData {
