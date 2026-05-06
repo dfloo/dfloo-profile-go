@@ -439,6 +439,11 @@ func (h *ResumeHandler) generateResumePDFWithInflight(resume *model.Resume) erro
 	return err
 }
 
+func (h *ResumeHandler) GetFontOptions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(latex.SupportedFonts())
+}
+
 func (h *ResumeHandler) generateResumePDF(resume *model.Resume) error {
 	cacheDir := h.getCacheDir()
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {

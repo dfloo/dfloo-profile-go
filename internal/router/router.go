@@ -77,6 +77,19 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 		).ServeHTTP(w, r)
 	})
 
+	mux.HandleFunc("/api/resumes/fonts", func(w http.ResponseWriter, r *http.Request) {
+		middleware.Core(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					resumeHandler.GetFontOptions(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
 	mux.HandleFunc("/api/resumes", func(w http.ResponseWriter, r *http.Request) {
 		middleware.CoreAuthenticated(
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

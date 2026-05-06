@@ -6,6 +6,9 @@
 \usepackage[margin=2cm]{geometry}
 \usepackage[none]{hyphenat}
 \usepackage{titlesec}
+{{- if .FontFamily}}
+{{ .FontFamily }}
+{{- end}}
 
 \pagestyle{empty}
 \titlespacing*{\section}{0pt}{0.75em}{0.75em}

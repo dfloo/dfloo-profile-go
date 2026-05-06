@@ -90,6 +90,45 @@ func ConvertToPDF(filePath string) ([]byte, error) {
 	return pdfBytes, nil
 }
 
+// FontOption describes a supported font family for resume PDF generation.
+// spec holds the LaTeX preamble snippet (trusted constant, never user-controlled).
+type FontOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	spec  string
+}
+
+// fontOptions is the single source of truth for supported fonts: ordering, labels, and LaTeX snippets.
+// Limited to fonts available via texlive-fonts-recommended + texlive-latex-recommended (PSNFSS).
+var fontOptions = []FontOption{
+	{Value: "lmodern", Label: "Latin Modern (default)", spec: ""},
+	{Value: "times", Label: "Times", spec: `\usepackage[T1]{fontenc}\usepackage{mathptmx}`},
+	{Value: "palatino", Label: "Palatino", spec: `\usepackage[T1]{fontenc}\usepackage{mathpazo}`},
+	{Value: "charter", Label: "Charter", spec: `\usepackage[T1]{fontenc}\usepackage{charter}`},
+	{Value: "helvetica", Label: "Helvetica", spec: "\\usepackage[T1]{fontenc}\n\\usepackage{helvet}\n\\renewcommand{\\familydefault}{\\sfdefault}"},
+}
+
+func resolvedFontSpec(apiKey string) string {
+	if apiKey == "" {
+		return ""
+	}
+	for _, f := range fontOptions {
+		if f.Value == apiKey {
+			return f.spec
+		}
+	}
+	return ""
+}
+
+// SupportedFonts returns the ordered list of supported font families for the API.
+func SupportedFonts() []FontOption {
+	result := make([]FontOption, len(fontOptions))
+	for i, f := range fontOptions {
+		result[i] = FontOption{Value: f.Value, Label: f.Label}
+	}
+	return result
+}
+
 func FormatTemplateData(resume *model.Resume) TemplateData {
 	return TemplateData{
 		Resume:     *resume,
@@ -100,7 +139,7 @@ func FormatTemplateData(resume *model.Resume) TemplateData {
 		Experience: FormatExperience(resume.Experience),
 		Education:  FormatEducation(resume.Education),
 		Skills:     FormatSkills(resume.Skills),
-		FontFamily: resume.TemplateSettings.FontFamily,
+		FontFamily: resolvedFontSpec(resume.TemplateSettings.FontFamily),
 	}
 }
 
