@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/dfloo/dfloo-profile-go/internal/claude"
 	"github.com/dfloo/dfloo-profile-go/internal/email"
 	"github.com/dfloo/dfloo-profile-go/internal/handler"
 	"github.com/dfloo/dfloo-profile-go/internal/middleware"
@@ -19,6 +20,7 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 	profileHandler := handler.NewProfileHandler(profileRepo)
 	resumeRepo := repository.NewDBResumeRepository(pool)
 	resumeHandler := handler.NewResumeHandler(resumeRepo)
+	resumeHandler.ClaudeClient = claude.New()
 	jobApplicationRepo := repository.NewDBJobApplicationRepository(pool)
 	jobApplicationHandler := handler.NewJobApplicationHandler(jobApplicationRepo)
 	meetingRequestRepo := repository.NewDBMeetingRequestRepository(pool)
@@ -83,6 +85,19 @@ func New(pool *pgxpool.Pool) *http.ServeMux {
 				switch r.Method {
 				case http.MethodGet:
 					resumeHandler.GetFontOptions(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}),
+		).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/resumes/tailor/{resumeId}", func(w http.ResponseWriter, r *http.Request) {
+		middleware.CoreAuthenticated(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodPost:
+					resumeHandler.TailorResume(w, r)
 				default:
 					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 				}

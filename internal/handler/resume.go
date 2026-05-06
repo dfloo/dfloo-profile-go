@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/dfloo/dfloo-profile-go/internal/claude"
 	"github.com/dfloo/dfloo-profile-go/internal/latex"
 	"github.com/dfloo/dfloo-profile-go/internal/middleware"
 	"github.com/dfloo/dfloo-profile-go/internal/model"
@@ -22,6 +23,7 @@ import (
 
 type ResumeHandler struct {
 	Repo          repository.ResumeRepository
+	ClaudeClient  claude.Client
 	GetUserID     func(context.Context) string
 	EncodeID      func(string) string
 	DecodeID      func(string) (string, error)
@@ -582,4 +584,88 @@ func (h *ResumeHandler) getCacheDir() string {
 		return h.CacheDir
 	}
 	return getResumeCacheDir()
+}
+
+func (h *ResumeHandler) TailorResume(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	userID := h.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		return
+	}
+
+	encodedResumeID := r.PathValue("resumeId")
+	if encodedResumeID == "" {
+		http.Error(w, "resumeId is required", http.StatusBadRequest)
+		return
+	}
+
+	decodedResumeID, err := h.DecodeID(encodedResumeID)
+	if err != nil {
+		http.Error(w, "Failed to decode resumeID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		JobDescription string `json:"jobDescription"`
+		Company        string `json:"company"`
+		Role           string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.JobDescription == "" {
+		http.Error(w, "jobDescription is required", http.StatusBadRequest)
+		return
+	}
+
+	resume, err := h.Repo.GetResumeByID(r.Context(), decodedResumeID, userID)
+	if err != nil {
+		http.Error(w, "Resume not found", http.StatusNotFound)
+		return
+	}
+
+	expInputs := make([]claude.ExperienceInput, len(resume.Experience))
+	for i, e := range resume.Experience {
+		expInputs[i] = claude.ExperienceInput{
+			Employer:     e.Employer,
+			Title:        e.Title,
+			StartDate:    e.StartDate,
+			EndDate:      e.EndDate,
+			BulletPoints: e.BulletPoints,
+		}
+	}
+
+	tailored, err := h.ClaudeClient.TailorResume(r.Context(), claude.TailorRequest{
+		Summary:        resume.Summary,
+		Skills:         resume.Skills,
+		Experience:     expInputs,
+		Company:        req.Company,
+		Role:           req.Role,
+		JobDescription: req.JobDescription,
+	})
+	if err != nil {
+		log.Printf("claude TailorResume error: %v", err)
+		http.Error(w, "Failed to tailor resume", http.StatusBadGateway)
+		return
+	}
+
+	if len(tailored.Experience) != len(resume.Experience) {
+		log.Printf("claude returned %d experience entries, expected %d", len(tailored.Experience), len(resume.Experience))
+		http.Error(w, "Failed to tailor resume", http.StatusBadGateway)
+		return
+	}
+
+	resume.Summary = tailored.Summary
+	resume.Skills = tailored.Skills
+	for i := range resume.Experience {
+		resume.Experience[i].BulletPoints = tailored.Experience[i].BulletPoints
+	}
+
+	resume.ResumeID = h.EncodeID(resume.ResumeID)
+	resume.Profile.ProfileID = h.EncodeID(resume.Profile.ProfileID)
+
+	json.NewEncoder(w).Encode(resume)
 }
